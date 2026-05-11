@@ -4,6 +4,13 @@ import Sidebar from './components/Sidebar';
 import DeviceCard from './components/DeviceCard';
 import ColorControl from './components/ColorControl';
 import Scenes from './components/Scenes';
+import AddRoomModal from './components/AddRoomModal';
+import ConfigureDeviceModal from './components/ConfigureDeviceModal';
+import ProvisioningModal from './components/ProvisioningModal';
+
+
+
+
 
 // Socket connection
 const socket = io('http://localhost:3000', {
@@ -19,10 +26,125 @@ const App = () => {
   const [autoMode, setAutoMode] = useState(false);
   const [currentLux, setCurrentLux] = useState(0);
   const [mqttStatus, setMqttStatus] = useState('Connecting...');
+  const [devices, setDevices] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
+  const [configuringDevice, setConfiguringDevice] = useState(null);
+  const [currentRoom, setCurrentRoom] = useState(null);
+
+
+
+
+
 
   const isInteracting = useRef(false);
 
   useEffect(() => {
+    fetchDevices();
+    fetchRooms();
+  }, []);
+
+  const fetchRooms = async () => {
+    try {
+      const res = await fetch('http://localhost:3000/api/rooms');
+      const data = await res.json();
+      setRooms(data);
+    } catch (err) {
+      console.error('Failed to fetch rooms', err);
+    }
+  };
+
+  const fetchDevices = async () => {
+
+    try {
+      const res = await fetch('http://localhost:3000/api/devices');
+      const data = await res.json();
+      setDevices(data);
+    } catch (err) {
+      console.error('Failed to fetch devices', err);
+    }
+  };
+
+  const handleAddRoom = async (roomData) => {
+    try {
+      const res = await fetch('http://localhost:3000/api/rooms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(roomData)
+      });
+      if (res.ok) {
+        fetchRooms();
+      }
+    } catch (err) {
+      console.error('Failed to add room', err);
+    }
+  };
+
+  const handleConfigureDevice = async (deviceId, configData) => {
+    try {
+      const res = await fetch(`http://localhost:3000/api/devices/${deviceId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(configData)
+      });
+      if (res.ok) {
+        fetchDevices();
+        setConfiguringDevice(null);
+      }
+    } catch (err) {
+      console.error('Failed to configure device', err);
+    }
+  };
+
+  const handleRemoveDevice = async (deviceId) => {
+    try {
+      const res = await fetch(`http://localhost:3000/api/devices/${deviceId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        fetchDevices();
+      }
+    } catch (err) {
+      console.error('Failed to remove device', err);
+    }
+  };
+
+  const handleRemoveRoom = async (roomName) => {
+    if (!window.confirm(`Are you sure you want to remove the room "${roomName}"? Devices in this room will become Unassigned.`)) return;
+    try {
+      const res = await fetch(`http://localhost:3000/api/rooms/${roomName}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        fetchRooms();
+        fetchDevices();
+        if (currentRoom?.name === roomName) setCurrentRoom(null);
+      }
+    } catch (err) {
+      console.error('Failed to remove room', err);
+    }
+  };
+
+  const handleAddDevice = async (deviceData) => {
+
+    try {
+      const res = await fetch('http://localhost:3000/api/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(deviceData)
+      });
+      if (res.ok) {
+        fetchDevices();
+      }
+    } catch (err) {
+      console.error('Failed to provision device', err);
+    }
+  };
+
+
+  useEffect(() => {
+
     socket.on('mqtt_status', (data) => setMqttStatus(data.status));
     
     // Global state sync from server
@@ -244,43 +366,137 @@ const App = () => {
   const renderDashboard = () => (
     <div className="dashboard-view animate-fade-in">
       <div className="welcome-header">
-        <h1>Smart Home</h1>
-        <p>Welcome back, Rakesh. System is stable.</p>
+        <h1>{currentRoom ? currentRoom.name : 'Your Home'}</h1>
+        <p>{currentRoom ? `Managing devices in ${currentRoom.name}` : 'Select a room to manage your devices.'}</p>
+        {currentRoom && (
+          <button className="back-link" onClick={() => setCurrentRoom(null)}>
+            ← Back to All Rooms
+          </button>
+        )}
       </div>
 
-      <div className="quick-stats">
-        <div className="stat-card">
-          <p>Avg Temp</p>
-          <h2>24°C</h2>
+      {/* Newly Discovered Devices - Always show on main dashboard or if specifically in "Unassigned" */}
+      {(!currentRoom || currentRoom.name === 'Unassigned') && devices.some(d => !d.isConfigured) && (
+        <div className="discovery-section animate-fade-in">
+          <div className="discovery-header">
+            <div className="pulse-icon"></div>
+            <h2>Newly Discovered Devices ({devices.filter(d => !d.isConfigured).length})</h2>
+          </div>
+          <div className="discovery-grid">
+            {devices
+              .filter(d => !d.isConfigured)
+              .map(device => (
+                <div key={device.deviceId} className="discovery-card" onClick={() => setConfiguringDevice(device)}>
+                  <div className="discovery-icon">{device.icon}</div>
+                  <div className="discovery-info">
+                    <h4>{device.deviceId}</h4>
+                    <p>Tap to assign appliance</p>
+                  </div>
+                  <button className="assign-btn">Assign</button>
+                </div>
+              ))
+            }
+          </div>
         </div>
-        <div className="stat-card">
-          <p>Light Intensity</p>
-          <h2>{currentLux} lx</h2>
-        </div>
-        <div className="stat-card">
-          <p>Active Mode</p>
-          <h2>{autoMode ? 'Auto' : 'Manual'}</h2>
-        </div>
-      </div>
+      )}
 
-      <div className="section-title">
-        <h2>Your Devices</h2>
-      </div>
+      {!currentRoom ? (
+        <div className="rooms-grid">
+          {rooms.map(room => {
+            const roomDevices = devices.filter(d => d.room === room.name && d.isConfigured);
+            const activeCount = roomDevices.filter(d => d.deviceId === 'light-1' ? lightStatus : d.on).length;
+            
+            return (
+                <div key={room.name} className="room-card-wrapper">
+                  <div className="room-card" onClick={() => setCurrentRoom(room)}>
+                    <div className="room-card-header">
+                      <span className="room-card-icon">{room.icon}</span>
+                      <div className="room-card-stats">
+                        <span className="active-dot"></span>
+                        {activeCount} Active
+                      </div>
+                    </div>
+                    <div className="room-card-body">
+                      <h3>{room.name}</h3>
+                      <p>{roomDevices.length} Devices</p>
+                    </div>
+                    <div className="room-card-footer">
+                      <span>View Details</span>
+                      <span className="arrow">→</span>
+                    </div>
+                  </div>
+                  <button className="room-delete-btn" onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveRoom(room.name);
+                  }}>×</button>
+                </div>
 
-      <div className="device-grid">
-        <DeviceCard 
-          title="Living Room Light" 
-          status={lightStatus}
-          icon="💡"
-          type="none"
-          onToggle={toggleLight}
-          onAction={(action) => action === 'navigate' && setSelectedDevice({ title: 'Living Room Light' })}
-        />
-        <DeviceCard title="Air Conditioner" status={false} icon="❄️" />
-        <DeviceCard title="Smart TV" status={false} icon="📺" />
-        <DeviceCard title="Main Camera" status={true} icon="📹" />
+            );
+          })}
+          
+          {/* Unassigned Room Card if devices exist */}
+          {devices.some(d => (!d.room || d.room === 'Unassigned') && d.isConfigured) && (
+            <div className="room-card unassigned" onClick={() => setCurrentRoom({ name: 'Unassigned', icon: '❓' })}>
+              <div className="room-card-header">
+                <span className="room-card-icon">❓</span>
+              </div>
+              <div className="room-card-body">
+                <h3>Unassigned</h3>
+                <p>{devices.filter(d => (!d.room || d.room === 'Unassigned') && d.isConfigured).length} Devices</p>
+              </div>
+              <div className="room-card-footer">
+                <span>View Details</span>
+                <span className="arrow">→</span>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="room-detail-view animate-fade-in">
+          <div className="device-grid">
+            {devices
+              .filter(device => device.room === currentRoom.name && device.isConfigured)
+              .map(device => (
+                <DeviceCard 
+                  key={device.deviceId}
+                  title={device.title} 
+                  status={device.deviceId === 'light-1' ? lightStatus : device.on}
+                  icon={device.icon || "💡"}
+                  type="none"
+                  onToggle={device.deviceId === 'light-1' ? toggleLight : () => {}}
+                  onAction={(action) => {
+                    if (action === 'navigate') {
+                      setSelectedDevice({ title: device.title, deviceId: device.deviceId });
+                    } else if (action === 'remove') {
+                      handleRemoveDevice(device.deviceId);
+                    } else if (action === 'edit') {
+                      setConfiguringDevice(device);
+                    }
+                  }}
+                />
+
+              ))
+            }
+          </div>
+          {devices.filter(device => device.room === currentRoom.name && device.isConfigured).length === 0 && (
+            <div className="empty-state">
+              <p>No devices assigned to this room yet.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="add-actions">
+        <button className="add-device-btn" onClick={() => setIsModalOpen(true)}>
+          <span>+</span> Add Device
+        </button>
+        <button className="add-room-btn" onClick={() => setIsRoomModalOpen(true)}>
+          <span>🏠</span> Add Room
+        </button>
       </div>
     </div>
+
+
   );
 
   return (
@@ -308,7 +524,27 @@ const App = () => {
             ? renderDetailView()
             : renderDashboard()
         }
+        <ProvisioningModal 
+          isOpen={isModalOpen} 
+          onClose={() => setIsModalOpen(false)} 
+          onFinish={handleAddDevice} 
+        />
+
+        <AddRoomModal 
+          isOpen={isRoomModalOpen} 
+          onClose={() => setIsRoomModalOpen(false)} 
+          onAdd={handleAddRoom} 
+        />
+        <ConfigureDeviceModal
+          isOpen={!!configuringDevice}
+          device={configuringDevice}
+          onClose={() => setConfiguringDevice(null)}
+          onConfigure={handleConfigureDevice}
+        />
       </main>
+
+
+
 
       <style jsx>{`
         .app-container { display: flex; min-height: 100vh; }
@@ -328,10 +564,70 @@ const App = () => {
         .stat-card { background: white; padding: 24px; border-radius: 24px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); }
         .stat-card p { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
         .stat-card h2 { font-size: 24px; font-weight: 700; }
+        
+        .discovery-section { background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 24px; padding: 24px; margin-bottom: 40px; }
+        .discovery-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+        .discovery-header h2 { font-size: 16px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; }
+        .pulse-icon { width: 10px; height: 10px; background: var(--primary); border-radius: 50%; box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); } 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); } }
+        
+        .discovery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+        .discovery-card { background: white; padding: 16px; border-radius: 16px; display: flex; align-items: center; gap: 16px; cursor: pointer; transition: var(--transition); border: 1px solid var(--border); }
+        .discovery-card:hover { transform: translateY(-2px); border-color: var(--primary); box-shadow: var(--shadow); }
+        .discovery-icon { font-size: 24px; width: 48px; height: 48px; background: #f1f5f9; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+        .discovery-info h4 { font-size: 14px; font-weight: 700; color: var(--text-main); margin-bottom: 2px; }
+        .discovery-info p { font-size: 12px; color: var(--text-muted); }
+        .assign-btn { margin-left: auto; padding: 6px 14px; background: var(--primary); color: white; border-radius: 8px; font-size: 12px; font-weight: 700; }
+
         .section-title { margin: 32px 0 20px; }
+
         .section-title h2 { font-size: 18px; font-weight: 600; }
+        .back-link { background: none; color: var(--primary); font-weight: 700; font-size: 14px; margin-top: 8px; display: block; }
+        
+        .rooms-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 32px; margin-top: 20px; }
+        .room-card-wrapper { position: relative; }
+        .room-card { background: white; padding: 32px; border-radius: 28px; border: 1px solid var(--border); box-shadow: var(--shadow-sm); cursor: pointer; transition: var(--transition); }
+        .room-card:hover { transform: translateY(-6px); box-shadow: var(--shadow); border-color: var(--primary); }
+        .room-delete-btn { 
+          position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; 
+          background: #fee2e2; color: #ef4444; border-radius: 50%; 
+          display: flex; align-items: center; justify-content: center; 
+          font-size: 18px; font-weight: 700; opacity: 0; transition: var(--transition);
+        }
+        .room-card-wrapper:hover .room-delete-btn { opacity: 1; }
+        .room-delete-btn:hover { background: #ef4444; color: white; }
+        
+        .room-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+
+        .room-card-icon { font-size: 32px; width: 64px; height: 64px; background: #f8fafc; border-radius: 16px; display: flex; align-items: center; justify-content: center; transition: var(--transition); }
+        .room-card:hover .room-card-icon { background: var(--primary); transform: rotate(-5deg); color: white; }
+        .room-card-stats { font-size: 12px; font-weight: 700; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+        .active-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-success); }
+        .room-card-body h3 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+        .room-card-body p { font-size: 14px; color: var(--text-muted); }
+        .room-card-footer { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 700; color: var(--primary); }
+        .room-card-footer .arrow { transition: var(--transition); }
+        .room-card:hover .arrow { transform: translateX(4px); }
+        
+        .room-detail-view { margin-top: 20px; }
         .device-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 24px; }
+        
+        .empty-state { text-align: center; padding: 60px; color: var(--text-muted); }
+        
+        .add-actions { display: flex; justify-content: center; gap: 20px; margin-top: 40px; }
+
+        .add-device-btn { display: flex; align-items: center; gap: 10px; padding: 14px 28px; background: var(--primary); color: white; border-radius: 100px; font-weight: 700; box-shadow: 0 10px 20px rgba(37, 99, 235, 0.2); transition: var(--transition); }
+        .add-device-btn:hover { transform: translateY(-2px); box-shadow: 0 15px 30px rgba(37, 99, 235, 0.3); }
+        .add-device-btn span { font-size: 20px; }
+        
+        .add-room-btn { display: flex; align-items: center; gap: 10px; padding: 14px 28px; background: white; color: var(--primary); border: 1px solid var(--primary); border-radius: 100px; font-weight: 700; transition: var(--transition); }
+        .add-room-btn:hover { background: rgba(37, 99, 235, 0.05); transform: translateY(-2px); }
+        .add-room-btn span { font-size: 18px; }
+
         @media (max-width: 1024px) { .sidebar { width: 80px; padding: 24px 12px; } .logo-text, .nav-label { display: none; } .content { margin-left: 80px; padding: 24px; } .device-grid { grid-template-columns: 1fr 1fr; } }
+
+
+
       `}</style>
     </div>
   );

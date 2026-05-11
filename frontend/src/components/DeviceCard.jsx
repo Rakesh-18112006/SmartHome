@@ -13,7 +13,30 @@ const DeviceCard = ({ title, status, icon, type, value, onToggle, onAction }) =>
     >
       <div className="card-header">
         <div className="icon-box">{icon}</div>
+        <div className="card-actions">
+          <button 
+            className="action-btn edit-btn" 
+            onClick={(e) => {
+              e.stopPropagation();
+              onAction('edit');
+            }}
+          >
+            ✏️
+          </button>
+          <button 
+            className="action-btn delete-btn" 
+            onClick={(e) => {
+              e.stopPropagation();
+              if (window.confirm(`Are you sure you want to remove ${title}?`)) {
+                onAction('remove');
+              }
+            }}
+          >
+            🗑️
+          </button>
+        </div>
       </div>
+
       <div className="card-body">
         <h3>{title}</h3>
         <p>{status ? 'Active' : 'Offline'}</p>
@@ -70,6 +93,28 @@ const DeviceCard = ({ title, status, icon, type, value, onToggle, onAction }) =>
         .on .icon-box {
           background: var(--primary);
           color: white;
+        }
+        .card-actions {
+          display: flex;
+          gap: 4px;
+        }
+        .action-btn {
+          background: none;
+          font-size: 14px;
+          opacity: 0;
+          transition: var(--transition);
+          padding: 8px;
+          border-radius: 8px;
+        }
+        .device-card:hover .action-btn {
+          opacity: 0.5;
+        }
+        .action-btn:hover {
+          opacity: 1 !important;
+          background: #f1f5f9;
+        }
+        .delete-btn:hover {
+          background: #fee2e2 !important;
         }
         .card-body h3 {
           font-size: 16px;
