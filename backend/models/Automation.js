@@ -54,6 +54,10 @@ const automationSchema = new mongoose.Schema({
     type: String,
     default: '⚡',
   },
+  room: {
+    type: String,
+    default: 'Global',
+  },
   enabled: {
     type: Boolean,
     default: true,

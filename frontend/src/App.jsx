@@ -490,9 +490,11 @@ const App = () => {
         <button className="add-device-btn" onClick={() => setIsModalOpen(true)}>
           <span>+</span> Add Device
         </button>
-        <button className="add-room-btn" onClick={() => setIsRoomModalOpen(true)}>
-          <span>🏠</span> Add Room
-        </button>
+        {!currentRoom && (
+          <button className="add-room-btn" onClick={() => setIsRoomModalOpen(true)}>
+            <span>🏠</span> Add Room
+          </button>
+        )}
       </div>
     </div>
 
