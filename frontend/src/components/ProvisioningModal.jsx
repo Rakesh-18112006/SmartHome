@@ -1,14 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
-    title: 'New Device',
+    title: '',
     icon: '💡',
     ssid: '',
-    password: ''
+    password: '',
+    room: 'Unassigned'
   });
+  const [rooms, setRooms] = useState([]);
   const [isConnecting, setIsConnecting] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchRooms();
+    }
+  }, [isOpen]);
+
+  const fetchRooms = async () => {
+    try {
+      const res = await fetch('http://localhost:3000/api/rooms');
+      const data = await res.json();
+      setRooms(data);
+    } catch (err) {
+      console.error('Failed to fetch rooms', err);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -31,12 +49,13 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
       setIsConnecting(false);
       onFinish({
         deviceId: `esp-${Math.random().toString(16).slice(2, 6)}`,
-        title: `Unconfigured ${formData.label || 'Device'}`,
+        title: formData.title || `My ${formData.label || 'Device'}`,
         icon: formData.icon,
-        isConfigured: false,
-        room: 'Unassigned'
+        room: formData.room,
+        isConfigured: true
       });
       setStep(1);
+      setFormData({ ...formData, title: '', ssid: '', password: '', room: 'Unassigned' });
       onClose();
     }, 3000);
   };
@@ -45,13 +64,13 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
     <div className="modal-overlay">
       <div className="modal-content animate-slide-up">
         <div className="modal-header">
-          <h2>{step === 1 ? 'Select Device Type' : step === 2 ? 'Connect to WiFi' : 'Provisioning'}</h2>
+          <h2>{step === 1 ? 'Select Device Type' : 'Configure & Connect'}</h2>
           <button className="close-btn" onClick={onClose}>&times;</button>
         </div>
 
         {step === 1 && (
           <div className="step-content">
-            <p className="step-hint">What would you like to add?</p>
+            <p className="step-hint">What appliance would you like to add?</p>
             <div className="icon-grid">
               {icons.map(item => (
                 <button 
@@ -69,30 +88,61 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
         )}
 
         {step === 2 && (
-          <div className="step-content">
-            <p className="step-hint">Enter your WiFi details to connect the device.</p>
-            <div className="form-group">
-              <label>WiFi Network (SSID)</label>
-              <input 
-                type="text" 
-                placeholder="e.g. MyHome_WiFi"
-                value={formData.ssid}
-                onChange={(e) => setFormData({ ...formData, ssid: e.target.value })}
-              />
+          <div className="step-content scrollable">
+            <p className="step-hint">Complete the details below to pair your device.</p>
+            
+            <div className="form-section">
+              <h4>Appliance Details</h4>
+              <div className="form-group">
+                <label>Appliance Name</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Master Bedroom Fan"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Assign to Room</label>
+                <select 
+                  value={formData.room}
+                  className="room-select-input"
+                  onChange={(e) => setFormData({ ...formData, room: e.target.value })}
+                >
+                  <option value="Unassigned">Unassigned</option>
+                  {rooms.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                </select>
+              </div>
             </div>
-            <div className="form-group">
-              <label>Password</label>
-              <input 
-                type="password" 
-                placeholder="••••••••"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              />
+
+            <div className="form-divider"></div>
+
+            <div className="form-section">
+              <h4>WiFi Settings</h4>
+              <div className="form-group">
+                <label>WiFi Network (SSID)</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. MyHome_WiFi"
+                  value={formData.ssid}
+                  onChange={(e) => setFormData({ ...formData, ssid: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Password</label>
+                <input 
+                  type="password" 
+                  placeholder="••••••••"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                />
+              </div>
             </div>
+
             <div className="btn-row">
               <button className="back-btn" onClick={handleBack}>Back</button>
               <button className="next-btn primary" onClick={startProvisioning}>
-                Connect Device
+                Connect & Setup
               </button>
             </div>
           </div>
@@ -102,7 +152,7 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
           <div className="loading-overlay">
             <div className="loader"></div>
             <p>Connecting to {formData.ssid}...</p>
-            <span>Please keep the device powered on</span>
+            <span>Assigning to {formData.room === 'Unassigned' ? 'Unassigned' : formData.room} room</span>
           </div>
         )}
       </div>
@@ -139,6 +189,14 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
         .form-group label { display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; }
         .form-group input { width: 100%; padding: 14px 18px; border-radius: 16px; border: 1px solid var(--border); outline: none; background: #f8fafc; }
         .form-group input:focus { border-color: var(--primary); background: white; }
+
+        .form-section h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--primary); margin-bottom: 16px; }
+        .form-divider { height: 1px; background: var(--border); margin: 24px 0; }
+        .room-select-input { width: 100%; padding: 14px 18px; border-radius: 16px; border: 1px solid var(--border); background: #f8fafc; outline: none; appearance: none; }
+        
+        .scrollable { max-height: 400px; overflow-y: auto; padding-right: 8px; }
+        .scrollable::-webkit-scrollbar { width: 4px; }
+        .scrollable::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
 
         .btn-row { display: flex; gap: 16px; margin-top: 32px; }
         .next-btn { width: 100%; padding: 16px; background: var(--primary); color: white; border-radius: 16px; font-weight: 700; }
