@@ -26,56 +26,6 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
           </button>
         ))}
       </nav>
-      
-      <style jsx>{`
-        .sidebar {
-          width: 260px;
-          height: 100vh;
-          background: var(--bg-card);
-          border-right: 1px solid var(--border);
-          padding: 24px;
-          display: flex;
-          flex-direction: column;
-          position: fixed;
-          left: 0;
-          top: 0;
-        }
-        .logo {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          margin-bottom: 40px;
-          padding: 0 12px;
-        }
-        .logo-icon { font-size: 24px; }
-        .logo-text {
-          font-weight: 700;
-          font-size: 20px;
-          color: var(--text-main);
-          letter-spacing: -0.5px;
-        }
-        nav { display: flex; flex-direction: column; gap: 8px; }
-        .nav-item {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          padding: 12px 16px;
-          border-radius: var(--radius);
-          background: transparent;
-          color: var(--text-muted);
-          font-weight: 500;
-          text-align: left;
-        }
-        .nav-item:hover {
-          background: var(--bg-main);
-          color: var(--text-main);
-        }
-        .nav-item.active {
-          background: var(--primary);
-          color: white;
-        }
-        .nav-icon { font-size: 20px; }
-      `}</style>
     </div>
   );
 };
