@@ -44,6 +44,55 @@ const deviceSchema = new mongoose.Schema({
     type: String,
     default: 'solid',
   },
+  topic: {
+    type: String,
+  },
+  timerRemaining: {
+    type: Number,
+    default: 0,
+  },
+  timerAction: {
+    type: String,
+  },
+  voltage: Number,
+  current: Number,
+  power: Number,
+  energy: Number,
+  pf: Number,
+  // 3-Phase Metrics
+  voltageR: Number, voltageY: Number, voltageB: Number,
+  currentR: Number, currentY: Number, currentB: Number,
+  powerR: Number, powerY: Number, powerB: Number,
+  pfR: Number, pfY: Number, pfB: Number,
+  apparentPowerR: Number, apparentPowerY: Number, apparentPowerB: Number,
+  reactivePowerR: Number, reactivePowerY: Number, reactivePowerB: Number,
+  apparentEnergy: Number,
+  reactiveEnergy: Number,
+  phaseAngle: Number,
+  phaseAngle: Number,
+  temperature: Number,
+  externalTemp: Number,
+  subDevices: [{
+    index: Number,
+    type: { type: String, enum: ['switch', 'fan'] },
+    label: String,
+    on: { type: Boolean, default: false },
+    speed: { type: Number, default: 1 } // for fans: 1-5
+  }],
+  schedules: [{
+    startTime: String,
+    endTime: String,
+    startAction: { type: String, default: 'ON' },
+    endAction: { type: String, default: 'OFF' },
+    days: [String],
+    enabled: { type: Boolean, default: true }
+  }],
+  lastSeen: {
+    type: Date,
+    default: Date.now
+  }
+}, {
+  timestamps: true,
 });
 
 const Device = mongoose.model('Device', deviceSchema);

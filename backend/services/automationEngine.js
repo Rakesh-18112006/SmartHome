@@ -1,5 +1,6 @@
 import Automation from '../models/Automation.js';
-import { publishToLight } from './mqttManager.js';
+import Device from '../models/Device.js';
+import { publishToLight, publishToTopic } from './mqttManager.js';
 import { getState, updateState } from './deviceState.js';
 
 /**
@@ -56,46 +57,89 @@ function evaluateCondition(condition) {
  * Execute a single action on a device.
  */
 async function executeAction(action, io) {
-  const state = getState();
+  try {
+    const { targetDeviceId, subDeviceIndex, command, params } = action;
+    console.log(`[AUTOMATION ENGINE] Executing action: ${command} on ${targetDeviceId} (Sub: ${subDeviceIndex})`);
 
-  console.log(`[AUTOMATION ENGINE] Executing action: ${action.command} on ${action.targetDevice}`);
+    // Special handling for the legacy RGBW light (if used)
+    if (targetDeviceId === 'light-1') {
+      const state = getState();
+      switch (command) {
+        case 'turn_on':
+          updateState({ state: 'ON' });
+          await publishToLight({ ...getState(), state: 'ON' });
+          break;
+        case 'turn_off':
+          updateState({ state: 'OFF' });
+          await publishToLight({ ...getState(), state: 'OFF' });
+          break;
+        case 'set_brightness':
+          const brightness = params?.brightness ?? 255;
+          updateState({ brightness, state: 'ON' });
+          await publishToLight({ ...getState(), brightness, state: 'ON' });
+          break;
+        case 'set_color':
+          const color = params?.color || [255, 255, 255, 255];
+          updateState({ color, state: 'ON', effect: 'solid' });
+          await publishToLight({ ...getState() });
+          break;
+        case 'set_effect':
+          const effect = params?.effect || 'solid';
+          updateState({ effect, state: 'ON' });
+          await publishToLight({ ...getState() });
+          break;
+      }
+      if (io) io.emit('device_state_update', getState());
+      return;
+    }
 
-  switch (action.command) {
-    case 'turn_on':
-      updateState({ state: 'ON' });
-      await publishToLight({ ...getState(), state: 'ON' });
-      break;
+    // Generic device handling
+    const device = await Device.findOne({ deviceId: targetDeviceId });
+    if (!device) {
+      console.warn(`[AUTOMATION ENGINE] Device not found: ${targetDeviceId}`);
+      return;
+    }
 
-    case 'turn_off':
-      updateState({ state: 'OFF' });
-      await publishToLight({ ...getState(), state: 'OFF' });
-      break;
+    let topic = '';
+    let payload = {};
 
-    case 'set_brightness':
-      const brightness = action.params?.brightness ?? 255;
-      updateState({ brightness, state: 'ON' });
-      await publishToLight({ ...getState(), brightness, state: 'ON' });
-      break;
+    if (targetDeviceId.startsWith('BSQ')) {
+      // Touch Panel Logic
+      topic = `touch-panel/${targetDeviceId}/switch/command`;
+      const idx = subDeviceIndex !== null ? subDeviceIndex : 0;
+      
+      if (command === 'turn_on' || command === 'turn_off') {
+        payload = { index: idx, status: command === 'turn_on' ? 1 : 0 };
+        // Update local DB state
+        if (device.subDevices && device.subDevices[idx]) {
+          device.subDevices[idx].on = (command === 'turn_on');
+        }
+      } else if (command === 'set_speed') {
+        // Find which subdevice is the fan
+        const fanIndex = device.subDevices.findIndex(sd => sd.type === 'fan');
+        if (fanIndex !== -1) {
+          topic = `touch-panel/${targetDeviceId}/dimmer/command`;
+          payload = { index: 0, status: params?.speed || 1 }; // Typically 1 dimmer per panel
+          device.subDevices[fanIndex].speed = params?.speed || 1;
+          device.subDevices[fanIndex].on = true;
+        }
+      }
+    } else if (targetDeviceId.startsWith('BSP') || device.type === 'plug' || device.type === 'switch') {
+      // Smart Plug / Single Channel Switch
+      topic = `smart-switch/command/${targetDeviceId}`;
+      const status = (command === 'turn_on' ? 'ON' : 'OFF');
+      payload = { entityId: targetDeviceId, relayStatus: status };
+      device.on = (command === 'turn_on');
+    }
 
-    case 'set_color':
-      const color = action.params?.color || [255, 255, 255, 255];
-      updateState({ color, state: 'ON', effect: 'solid' });
-      await publishToLight({ ...getState() });
-      break;
+    if (topic && Object.keys(payload).length > 0) {
+      await publishToTopic(topic, payload);
+      await device.save();
+      if (io) io.emit('device_state_update', device);
+    }
 
-    case 'set_effect':
-      const effect = action.params?.effect || 'solid';
-      updateState({ effect, state: 'ON' });
-      await publishToLight({ ...getState() });
-      break;
-
-    default:
-      console.warn(`[AUTOMATION ENGINE] Unknown command: ${action.command}`);
-  }
-
-  // Broadcast updated state to all connected clients
-  if (io) {
-    io.emit('device_state_update', getState());
+  } catch (err) {
+    console.error('[AUTOMATION ENGINE] Error executing action:', err);
   }
 }
 

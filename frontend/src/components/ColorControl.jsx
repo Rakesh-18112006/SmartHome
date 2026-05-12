@@ -47,7 +47,7 @@ const ColorControl = ({ onColorChange }) => {
         .wheel-container {
           position: relative;
           padding: 10px;
-          background: white;
+          background: var(--bg-card);
           border-radius: 50%;
           box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
         }
@@ -78,7 +78,7 @@ const ColorControl = ({ onColorChange }) => {
           gap: 16px;
           width: 100%;
           padding: 16px;
-          background: #f8fafc;
+          background: var(--bg-secondary);
           border-radius: 16px;
           border: 1px solid var(--border);
         }

@@ -1,70 +1,236 @@
-import { publishToLight } from './mqttManager.js';
-import { getState, updateState } from './deviceState.js';
+import { publishToTopic } from './mqttManager.js';
+import Device from '../models/Device.js';
 import { getSensorData, updateSensorData, evaluateAutomations } from './automationEngine.js';
 
 export const initSocket = (io, mqttClient) => {
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
 
-    // Send initial state to client
-    socket.emit('device_state_update', getState());
-    socket.emit('sensor_data_update', getSensorData());
-
-    socket.on('color_change', async (data) => {
-      const state = getState();
-      state.effect = 'solid'; // Switching color drops auto mode
-      state.autoMode = false;
-      
-      state.color[0] = data.r !== undefined ? data.r : state.color[0];
-      state.color[1] = data.g !== undefined ? data.g : state.color[1];
-      state.color[2] = data.b !== undefined ? data.b : state.color[2];
-      state.color[3] = data.w !== undefined ? data.w : state.color[3];
-      
-      await publishToLight(state);
-      io.emit('device_state_update', state);
+    // Send current MQTT status immediately
+    socket.emit('mqtt_status', { 
+      status: mqttClient.connected ? 'Connected' : 'Offline' 
     });
 
     socket.on('power_toggle', async (data) => {
-      const state = updateState({ state: data.state });
-      await publishToLight(state);
-      io.emit('device_state_update', state);
+      const { deviceId, state, relayStatus, entityId } = data;
+      const on = state ? (state === 'ON') : (relayStatus === 'ON');
+      const id = deviceId || entityId;
+      
+      // Look up device to get its type and topic
+      const device = await Device.findOne({ deviceId: id });
+      if (!device) return;
+
+      let topic = device.topic || `smarthome/${device.type}/${device.deviceId}`;
+      
+      if (id.startsWith('B3E') || id.startsWith('B1E')) {
+        topic = `energy-meter/three-phase/command/${id}`;
+      } else if (id.startsWith('BSP') || device.type === 'plug' || device.type === 'switch') {
+        topic = `smart-switch/command/${id}`;
+      }
+
+      const mqttPayload = (id.startsWith('B3E') || id.startsWith('B1E') || id.startsWith('BSP') || device.type === 'plug' || device.type === 'switch')
+        ? { entityId: id, relayStatus: on ? 'ON' : 'OFF' }
+        : { state: on ? 'ON' : 'OFF' };
+      
+      await updateDeviceAndPublish(device.deviceId, { on }, mqttPayload, topic);
+    });
+
+    socket.on('touch_panel_all_off', async (data) => {
+      const { deviceId } = data;
+      const device = await Device.findOne({ deviceId });
+      if (!device || !device.subDevices) return;
+
+      const topic = `touch-panel/${deviceId}/switch/command`;
+      
+      for (const sd of device.subDevices) {
+        if (!sd.on) continue;
+
+        let mqttPayload = { 
+          entityId: deviceId,
+          type: 'switch',
+          value: `${sd.index}0` // Index + '0' for OFF
+        };
+        
+        await publishToTopic(topic, mqttPayload);
+        
+        // Add a small delay to prevent network congestion/dropped messages
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      // Update all to OFF in DB
+      await Device.updateOne(
+        { deviceId },
+        { $set: { "subDevices.$[].on": false, "subDevices.$[].speed": 0 } }
+      );
+
+      const updatedDevice = await Device.findOne({ deviceId });
+      io.emit('device_updated', updatedDevice);
+    });
+
+    socket.on('touch_panel_action', async (data) => {
+      const { deviceId, subDeviceIndex, type, value } = data;
+      const device = await Device.findOne({ deviceId });
+      if (!device) return;
+
+      const topic = `touch-panel/${deviceId}/switch/command`;
+      let mqttPayload = { entityId: deviceId };
+
+      if (type === 'switch') {
+        const state = value ? '1' : '0';
+        mqttPayload.type = 'switch';
+        mqttPayload.value = `${subDeviceIndex}${state}`;
+        
+        // Optimistic update
+        await Device.updateOne(
+          { deviceId, "subDevices.index": subDeviceIndex },
+          { $set: { "subDevices.$.on": value } }
+        );
+      } else if (type === 'fan_speed') {
+        mqttPayload.type = 'dimmer';
+        mqttPayload.dimmer = String(subDeviceIndex);
+        mqttPayload.value = String(value);
+
+        // Optimistic update
+        await Device.updateOne(
+          { deviceId, "subDevices.index": subDeviceIndex },
+          { $set: { "subDevices.$.speed": value, "subDevices.$.on": value > 0 } }
+        );
+      }
+
+      await publishToTopic(topic, mqttPayload);
+      
+      // Update local devices and emit
+      const updatedDevice = await Device.findOne({ deviceId });
+      io.emit('device_updated', updatedDevice);
+    });
+
+    socket.on('set_offline_timer', async (data) => {
+      const { deviceId, timer, action } = data;
+      const device = await Device.findOne({ deviceId });
+      if (!device) return;
+
+      // Determine topic prefix based on device ID prefix
+      let prefix = 'smart-switch';
+      if (deviceId.startsWith('B3E') || deviceId.startsWith('B1E')) {
+        prefix = 'three-phase';
+      } else if (deviceId.startsWith('BSP')) {
+        prefix = 'smart-switch';
+      }
+
+      const topic = `${prefix}/${device.deviceId}/timer/command`;
+      const mqttPayload = {
+        timer: String(timer),
+        action: String(action)
+      };
+
+      await publishToTopic(topic, mqttPayload);
+      console.log(`[TIMER] Set offline timer for ${deviceId} on topic ${topic}: ${timer} mins, action ${action}`);
+    });
+
+    socket.on('add_schedule', async (data) => {
+      const { deviceId, startTime, endTime, days, startAction, endAction } = data;
+      const device = await Device.findOneAndUpdate(
+        { deviceId },
+        { $push: { schedules: { startTime, endTime, days, startAction, endAction, enabled: true } } },
+        { returnDocument: 'after' }
+      );
+      if (device) {
+        io.emit('device_state_update', device);
+        console.log(`[SCHEDULE] Added custom action schedule for ${deviceId}`);
+      }
+    });
+
+    socket.on('remove_schedule', async (data) => {
+      const { deviceId, scheduleId } = data;
+      const device = await Device.findOneAndUpdate(
+        { deviceId },
+        { $pull: { schedules: { _id: scheduleId } } },
+        { returnDocument: 'after' }
+      );
+      if (device) {
+        io.emit('device_state_update', device);
+        console.log(`[SCHEDULE] Removed schedule for ${deviceId}`);
+      }
+    });
+
+    // Modified helper to accept optional topic override
+    const updateDeviceAndPublish = async (deviceId, updates, mqttPayload, topicOverride) => {
+      const device = await Device.findOneAndUpdate({ deviceId }, updates, { returnDocument: 'after' });
+      if (device) {
+        const topic = topicOverride || device.topic || `smarthome/${device.type}/${device.deviceId}`;
+        await publishToTopic(topic, mqttPayload);
+        io.emit('device_state_update', device);
+        return device;
+      }
+      return null;
+    };
+
+    socket.on('color_change', async (data) => {
+      const { deviceId, r, g, b, w } = data;
+      const rgb = (r << 16) | (g << 8) | b;
+      
+      const mqttPayload = {
+        state: 'ON',
+        effect: 'solid',
+        color: [r, g, b, w]
+      };
+
+      await updateDeviceAndPublish(deviceId, { 
+        spectrumRgb: rgb, 
+        on: true, 
+        effect: 'solid' 
+      }, mqttPayload);
     });
 
     socket.on('brightness_change', async (data) => {
-      const state = getState();
-      if (state.autoMode) return; // Prevent manual change in auto mode
+      const { deviceId, brightness } = data;
+      
+      const mqttPayload = {
+        state: 'ON',
+        brightness: Math.round((brightness / 100) * 255) // Map 0-100 to 0-255 if needed, or use raw
+      };
+      
+      // If the UI sends 0-255, we use that. The App.jsx seems to send raw 0-255 for lights.
+      // But for curtains it sends 0-100.
+      mqttPayload.brightness = brightness; 
 
-      state.brightness = data.brightness;
-      await publishToLight(state);
-      io.emit('device_state_update', state);
-    });
-
-    socket.on('white_change', async (data) => {
-      const state = getState();
-      state.color[3] = data.white;
-      await publishToLight(state);
-      io.emit('device_state_update', state);
+      await updateDeviceAndPublish(deviceId, { brightness, on: true }, mqttPayload);
     });
 
     socket.on('toggle_auto_mode', async (data) => {
-      const state = updateState({ 
-        autoMode: data.enabled,
-        effect: data.enabled ? 'auto' : 'solid'
-      });
+      const { deviceId, enabled } = data;
       
-      await publishToLight(state);
-      console.log(`[AUTO MODE] ${data.enabled ? 'Enabled' : 'Disabled'}`);
-      io.emit('device_state_update', state);
+      const mqttPayload = {
+        state: 'ON',
+        effect: enabled ? 'auto' : 'solid'
+      };
+      
+      await updateDeviceAndPublish(deviceId, { effect: mqttPayload.effect, on: true }, mqttPayload);
     });
 
-    socket.on('force_white_mode', async () => {
-      const state = getState();
-      state.state = 'ON';
-      state.autoMode = true;
-      state.effect = 'auto_white'; // Use the new effect defined in ESP8266
+    socket.on('curtain_action', async (data) => {
+      const { deviceId, action } = data; // action is 10, 11, 20, 21
       
-      await publishToLight(state);
-      io.emit('device_state_update', state);
+      const device = await Device.findOne({ deviceId });
+      if (!device) return;
+
+      const topic = `smarthome/curtain/${deviceId}/command`;
+      // Payload is just the raw value as per requirement
+      const mqttPayload = { action: Number(action) };
+      
+      await publishToTopic(topic, mqttPayload);
+      console.log(`[CURTAIN] Sent action ${action} to ${deviceId}`);
+    });
+
+    socket.on('force_white_mode', async (data) => {
+      const { deviceId } = data;
+      
+      const mqttPayload = {
+        state: 'ON',
+        effect: 'auto_white'
+      };
+      
+      await updateDeviceAndPublish(deviceId, { effect: 'auto_white', on: true }, mqttPayload);
     });
 
     // ─── Automation / Sensor Events ───

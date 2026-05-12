@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
 
 const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
+  const API_BASE = `http://${window.location.hostname}:3000`;
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     title: '',
     icon: '💡',
     ssid: '',
     password: '',
-    room: 'Unassigned'
+    room: 'Unassigned',
+    deviceId: '',
+    numSwitches: 1,
+    numFans: 0
   });
+  const [subDevices, setSubDevices] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [isConnecting, setIsConnecting] = useState(false);
 
@@ -20,7 +25,7 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
 
   const fetchRooms = async () => {
     try {
-      const res = await fetch('http://localhost:3000/api/rooms');
+      const res = await fetch(`${API_BASE}/api/rooms`);
       const data = await res.json();
       setRooms(data);
     } catch (err) {
@@ -33,29 +38,49 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
   const icons = [
     { label: 'Light', icon: '💡' },
     { label: 'Plug', icon: '🔌' },
-    { label: 'Switch', icon: '🔘' },
-    { label: 'Sensor', icon: '📊' },
     { label: 'RGBW', icon: '🌈' },
-    { label: 'Curtain', icon: '🪟' }
+    { label: 'Curtain', icon: '🪟' },
+    { label: '3-Phase Auditor', icon: '🏭' },
+    { label: 'Single Phase Auditor', icon: '⚡' },
+    { label: 'Touch Panel', icon: '🖐️' }
   ];
 
   const handleNext = () => setStep(step + 1);
   const handleBack = () => setStep(step - 1);
+
+  const updateSubDevices = (switches, fans) => {
+    const list = [];
+    for (let i = 1; i <= switches; i++) {
+      list.push({ index: i, type: 'switch', label: `Switch ${i}`, on: false });
+    }
+    for (let i = 1; i <= fans; i++) {
+      list.push({ index: switches + i, type: 'fan', label: `Fan ${i}`, on: false, speed: 1 });
+    }
+    setSubDevices(list);
+  };
 
   const startProvisioning = () => {
     setIsConnecting(true);
     // Simulate IoT connection delay
     setTimeout(() => {
       setIsConnecting(false);
+      const deviceId = formData.deviceId || `esp-${Math.random().toString(16).slice(2, 6)}`;
+      const type = (formData.label || 'light').toLowerCase();
       onFinish({
-        deviceId: `esp-${Math.random().toString(16).slice(2, 6)}`,
+        deviceId: deviceId.trim(),
         title: formData.title || `My ${formData.label || 'Device'}`,
+        type: type === 'touch panel' ? 'touch-panel' : type,
         icon: formData.icon,
         room: formData.room,
-        isConfigured: true
+        isConfigured: true,
+        topic: type === 'touch panel' 
+          ? `touch-panel/${deviceId.trim()}/switch/status` 
+          : `smarthome/${type}/${deviceId.trim()}`,
+        subDevices: type === 'touch panel' ? subDevices : []
       });
       setStep(1);
-      setFormData({ ...formData, title: '', ssid: '', password: '', room: 'Unassigned' });
+      setFormData({ ...formData, title: '', ssid: '', password: '', room: 'Unassigned', numSwitches: 1, numFans: 0 });
+      setSubDevices([]);
       onClose();
     }, 3000);
   };
@@ -76,7 +101,12 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
                 <button 
                   key={item.label}
                   className={`icon-select-btn ${formData.icon === item.icon ? 'active' : ''}`}
-                  onClick={() => setFormData({ ...formData, icon: item.icon, label: item.label })}
+                  onClick={() => {
+                    setFormData({ ...formData, icon: item.icon, label: item.label });
+                    if (item.label === 'Touch Panel') {
+                      updateSubDevices(1, 0);
+                    }
+                  }}
                 >
                   <span className="icon-img">{item.icon}</span>
                   <span className="icon-label">{item.label}</span>
@@ -103,6 +133,15 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
                 />
               </div>
               <div className="form-group">
+                <label>Device ID (from Hardware)</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. BSP00000301"
+                  value={formData.deviceId}
+                  onChange={(e) => setFormData({ ...formData, deviceId: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
                 <label>Assign to Room</label>
                 <select 
                   value={formData.room}
@@ -114,6 +153,61 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
                 </select>
               </div>
             </div>
+
+            {formData.label === 'Touch Panel' && (
+              <>
+                <div className="form-divider"></div>
+                <div className="form-section">
+                  <h4>Panel Configuration</h4>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Normal Switches</label>
+                      <input 
+                        type="number" min="1" max="12"
+                        value={formData.numSwitches}
+                        onChange={(e) => {
+                          const count = parseInt(e.target.value) || 0;
+                          setFormData({ ...formData, numSwitches: count });
+                          // Update subdevices list
+                          updateSubDevices(count, formData.numFans);
+                        }}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Fan Switches</label>
+                      <input 
+                        type="number" min="0" max="4"
+                        value={formData.numFans}
+                        onChange={(e) => {
+                          const count = parseInt(e.target.value) || 0;
+                          setFormData({ ...formData, numFans: count });
+                          updateSubDevices(formData.numSwitches, count);
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="sub-devices-config">
+                    <p className="step-hint" style={{ marginTop: '12px', fontSize: '11px' }}>Label each button for the dashboard:</p>
+                    {subDevices.map((sd, i) => (
+                      <div key={i} className="form-group sub-device-row">
+                        <span className="index-label">{sd.index}. {sd.type === 'fan' ? '🌀' : '💡'}</span>
+                        <input 
+                          type="text" 
+                          placeholder={`${sd.type} ${sd.index} Name`}
+                          value={sd.label}
+                          onChange={(e) => {
+                            const newSD = [...subDevices];
+                            newSD[i].label = e.target.value;
+                            setSubDevices(newSD);
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
 
             <div className="form-divider"></div>
 
@@ -164,7 +258,7 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
           display: flex; align-items: center; justify-content: center; z-index: 1100;
         }
         .modal-content {
-          background: white; width: 90%; max-width: 420px; border-radius: 32px; padding: 40px;
+          background: var(--bg-card); width: 90%; max-width: 420px; border-radius: 32px; padding: 40px;
           box-shadow: 0 30px 60px rgba(0, 0, 0, 0.15); position: relative; overflow: hidden;
         }
         .modal-header { margin-bottom: 32px; }
@@ -176,10 +270,10 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
         .icon-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; }
         .icon-select-btn {
           display: flex; flex-direction: column; align-items: center; gap: 12px;
-          padding: 20px 10px; border-radius: 20px; background: #f8fafc; border: 2px solid transparent;
+          padding: 20px 10px; border-radius: 20px; background: var(--bg-secondary); border: 2px solid transparent;
           transition: var(--transition);
         }
-        .icon-select-btn:hover { background: #f1f5f9; }
+        .icon-select-btn:hover { background: var(--bg-tertiary); }
         .icon-select-btn.active { background: #eff6ff; border-color: var(--primary); }
         .icon-img { font-size: 32px; }
         .icon-label { font-size: 12px; font-weight: 700; color: var(--text-muted); }
@@ -187,12 +281,12 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
 
         .form-group { margin-bottom: 20px; }
         .form-group label { display: block; font-size: 13px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; }
-        .form-group input { width: 100%; padding: 14px 18px; border-radius: 16px; border: 1px solid var(--border); outline: none; background: #f8fafc; }
-        .form-group input:focus { border-color: var(--primary); background: white; }
+        .form-group input { width: 100%; padding: 14px 18px; border-radius: 16px; border: 1px solid var(--border); outline: none; background: var(--bg-secondary); }
+        .form-group input:focus { border-color: var(--primary); background: var(--bg-card); }
 
         .form-section h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--primary); margin-bottom: 16px; }
         .form-divider { height: 1px; background: var(--border); margin: 24px 0; }
-        .room-select-input { width: 100%; padding: 14px 18px; border-radius: 16px; border: 1px solid var(--border); background: #f8fafc; outline: none; appearance: none; }
+        .room-select-input { width: 100%; padding: 14px 18px; border-radius: 16px; border: 1px solid var(--border); background: var(--bg-secondary); outline: none; appearance: none; }
         
         .scrollable { max-height: 400px; overflow-y: auto; padding-right: 8px; }
         .scrollable::-webkit-scrollbar { width: 4px; }
@@ -200,20 +294,23 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
 
         .btn-row { display: flex; gap: 16px; margin-top: 32px; }
         .next-btn { width: 100%; padding: 16px; background: var(--primary); color: white; border-radius: 16px; font-weight: 700; }
-        .back-btn { width: 100px; background: #f1f5f9; color: var(--text-muted); border-radius: 16px; font-weight: 600; }
+        .back-btn { width: 100px; background: var(--bg-tertiary); color: var(--text-muted); border-radius: 16px; font-weight: 600; }
         
         .loading-overlay {
           position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-          background: white; display: flex; flex-direction: column; align-items: center; justify-content: center;
+          background: var(--bg-card); display: flex; flex-direction: column; align-items: center; justify-content: center;
           text-align: center; padding: 40px; z-index: 10;
         }
         .loader {
-          width: 48px; height: 48px; border: 5px solid #f3f3f3; border-top: 5px solid var(--primary);
+          width: 48px; height: 48px; border: 5px solid #f1f5f9; border-top-color: var(--primary);
           border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 24px;
         }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .loading-overlay p { font-weight: 700; font-size: 18px; margin-bottom: 8px; }
-        .loading-overlay span { color: var(--text-muted); font-size: 13px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .sub-device-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+        .index-label { font-size: 13px; font-weight: 800; color: var(--primary); min-width: 40px; }
+        .sub-devices-config { margin-top: 16px; background: var(--bg-secondary); padding: 16px; border-radius: 16px; }
 
         .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
       `}</style>

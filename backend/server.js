@@ -1,4 +1,11 @@
 import express from 'express';
+import dns from 'node:dns';
+
+// Fix for ENOTFOUND errors on some Windows systems with Node.js 18+
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
+
 import http from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
@@ -6,6 +13,7 @@ import dotenv from 'dotenv';
 import connectDB from './config/db.js';
 import { connectMQTT } from './config/mqtt.js';
 import { initSocket } from './services/socketService.js';
+import { startScheduler } from './services/schedulerService.js';
 import smarthomeRoutes from './routes/smarthome.js';
 import automationRoutes from './routes/automations.js';
 import Device from './models/Device.js';
@@ -63,7 +71,10 @@ const startServer = async () => {
   // 4. Initialize Socket.io
   initSocket(io, mqttClient);
 
-  // 5. Start Listening
+  // 5. Start Scheduler
+  startScheduler(io);
+
+  // 6. Start Listening
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Smart Home Server running on port ${PORT}`);

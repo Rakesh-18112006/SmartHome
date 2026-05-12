@@ -10,9 +10,17 @@ const COMMANDS = ['turn_on', 'turn_off', 'set_brightness', 'set_color', 'set_eff
  const ICONS = ['⚡', '🌡️', '💡', '❄️', '🔒', '🌙', '☀️', '🎬', '🔔', '🏠'];
 
 const EMPTY_COND = { sensor: 'temperature', operator: 'gt', value: 30 };
-const EMPTY_ACTION = { targetDevice: 'Air Conditioner', command: 'turn_on', params: {} };
+const EMPTY_ACTION = { targetDeviceId: '', targetDevice: '', command: 'turn_on', subDeviceIndex: null, params: {} };
 
-const Scenes = ({ socket }) => {
+const DEVICE_COMMANDS = {
+  light: ['turn_on', 'turn_off', 'set_brightness', 'set_color', 'set_effect'],
+  fan: ['turn_on', 'turn_off', 'set_speed'],
+  switch: ['turn_on', 'turn_off'],
+  plug: ['turn_on', 'turn_off'],
+  default: ['turn_on', 'turn_off']
+};
+
+const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
   const [rules, setRules] = useState([]);
   const [sensorData, setSensorData] = useState({ temperature: 25, humidity: 50, lux: 0, motion: false });
   const [showModal, setShowModal] = useState(false);
@@ -22,8 +30,6 @@ const Scenes = ({ socket }) => {
    const [simValues, setSimValues] = useState({ temperature: 25, humidity: 50, lux: 100, motion: 0 });
    const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
    const [currentRoom, setCurrentRoom] = useState(null);
-   const [rooms, setRooms] = useState([]);
-   const [allDevices, setAllDevices] = useState([]);
 
  
    // Form state
@@ -44,31 +50,9 @@ const Scenes = ({ socket }) => {
      } catch (e) { console.error('Fetch error:', e); }
    }, []);
  
-   const fetchRooms = useCallback(async () => {
-     try {
-       const res = await fetch('http://localhost:3000/api/rooms');
-       const data = await res.json();
-       setRooms(data);
-     } catch (err) {
-       console.error('Failed to fetch rooms', err);
-     }
-   }, []);
- 
-   const fetchAllDevices = useCallback(async () => {
-     try {
-       const res = await fetch('http://localhost:3000/api/devices');
-       const data = await res.json();
-       setAllDevices(data.filter(d => d.isConfigured));
-     } catch (err) {
-       console.error('Failed to fetch devices', err);
-     }
-   }, []);
- 
-   useEffect(() => { 
-     fetchRules(); 
-     fetchRooms();
-     fetchAllDevices();
-   }, [fetchRules, fetchRooms, fetchAllDevices]);
+    useEffect(() => { 
+      fetchRules(); 
+    }, [fetchRules]);
 
 
 
@@ -140,19 +124,9 @@ const Scenes = ({ socket }) => {
   };
 
   const handleAddRoom = async (roomData) => {
-    try {
-      const res = await fetch('http://localhost:3000/api/rooms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(roomData)
-       });
-       if (res.ok) {
-         showToast('🏠 Room created successfully!');
-         fetchRooms();
-       }
-
-    } catch (err) {
-      console.error('Failed to add room', err);
+    if (onAddRoom) {
+      await onAddRoom(roomData);
+      showToast('🏠 Room created successfully!');
     }
   };
 
@@ -181,7 +155,20 @@ const Scenes = ({ socket }) => {
   const addCond = () => setForm({ ...form, conditions: [...form.conditions, { ...EMPTY_COND }] });
   const removeCond = (i) => { if (form.conditions.length > 1) { const c = [...form.conditions]; c.splice(i, 1); setForm({ ...form, conditions: c }); }};
   const updateAction = (i, field, val) => {
-    const a = [...form.actions]; a[i] = { ...a[i], [field]: val }; setForm({ ...form, actions: a });
+    const a = [...form.actions]; 
+    if (field === 'targetDeviceId') {
+      const dev = allDevices.find(d => d.deviceId === val);
+      a[i] = { 
+        ...a[i], 
+        targetDeviceId: val, 
+        targetDevice: dev ? dev.title : '',
+        subDeviceIndex: null, // Reset sub-device when device changes
+        command: 'turn_on'    // Reset command to default
+      };
+    } else {
+      a[i] = { ...a[i], [field]: val }; 
+    }
+    setForm({ ...form, actions: a });
   };
   const addAction = () => setForm({ ...form, actions: [...form.actions, { ...EMPTY_ACTION }] });
   const removeAction = (i) => { if (form.actions.length > 1) { const a = [...form.actions]; a.splice(i, 1); setForm({ ...form, actions: a }); }};
@@ -328,96 +315,192 @@ const Scenes = ({ socket }) => {
               <button className="modal-close" onClick={() => setShowModal(false)}>✕</button>
             </div>
             <div className="modal-body">
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Rule Name</label>
-                  <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Cool Down Room" />
+              <div className="setup-section">
+                <div className="setup-header">
+                  <div className="step-num">1</div>
+                  <div className="step-info">
+                    <h3>Basic Information</h3>
+                    <p>Give your automation a name and icon</p>
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label>Icon</label>
-                  <select value={form.icon} onChange={e => setForm({ ...form, icon: e.target.value })}>
-                    {ICONS.map(ic => <option key={ic} value={ic}>{ic}</option>)}
-                  </select>
-                </div>
-              </div>
-               <div className="form-group">
-                 <label>Description (optional)</label>
-                 <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="What does this rule do?" />
-               </div>
-               
-               {!currentRoom && (
-                 <div className="form-group">
-                   <label>Assign to Room</label>
-                   <select 
-                     value={form.room} 
-                     onChange={e => setForm({ ...form, room: e.target.value })}
-                   >
-                     <option value="Global">Global / All Rooms</option>
-                     {rooms.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
-                   </select>
-                 </div>
-               )}
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Logic</label>
-                  <select value={form.conditionLogic} onChange={e => setForm({ ...form, conditionLogic: e.target.value })}>
-                    <option value="all">ALL conditions (AND)</option>
-                    <option value="any">ANY condition (OR)</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label>Cooldown (seconds)</label>
-                  <input type="number" value={form.cooldownSeconds} onChange={e => setForm({ ...form, cooldownSeconds: Number(e.target.value) })} />
-                </div>
-              </div>
-
-              {/* Conditions */}
-              <div className="section-label">📋 Conditions <button className="add-btn" onClick={addCond}>+ Add</button></div>
-              {form.conditions.map((c, i) => (
-                <div className="cond-row" key={i}>
-                  <select value={c.sensor} onChange={e => updateCond(i, 'sensor', e.target.value)}>
-                    {SENSORS.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <select value={c.operator} onChange={e => updateCond(i, 'operator', e.target.value)}>
-                    {Object.entries(OPS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
-                  {c.sensor === 'motion' ? (
-                    <select value={c.value} onChange={e => updateCond(i, 'value', e.target.value)}>
-                      <option value="1">Detected (1)</option>
-                      <option value="0">No Motion (0)</option>
+                
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Rule Name</label>
+                    <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="e.g. Morning Routine" />
+                  </div>
+                  <div className="form-group">
+                    <label>Icon</label>
+                    <select value={form.icon} onChange={e => setForm({ ...form, icon: e.target.value })}>
+                      {ICONS.map(ic => <option key={ic} value={ic}>{ic}</option>)}
                     </select>
-                  ) : (
-                    <input type="number" value={c.value} onChange={e => updateCond(i, 'value', e.target.value)} />
-                  )}
-                  <button className="remove-btn" onClick={() => removeCond(i)}>✕</button>
+                  </div>
                 </div>
-              ))}
+                <div className="form-group">
+                  <label>Description (optional)</label>
+                  <input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="What does this rule do?" />
+                </div>
 
-              {/* Actions */}
-               <div className="section-label">🎯 Actions <button className="add-btn" onClick={addAction}>+ Add</button></div>
-               {form.actions.map((a, i) => (
-                 <div className="action-row" key={i}>
-                   <select value={a.targetDevice} onChange={e => updateAction(i, 'targetDevice', e.target.value)}>
-                     <option value="">Select Device...</option>
-                     {allDevices.map(d => <option key={d.deviceId} value={d.title}>{d.title}</option>)}
-                   </select>
-                   <select value={a.command} onChange={e => updateAction(i, 'command', e.target.value)}>
-                    {COMMANDS.map(c => <option key={c} value={c}>{fmtCmd(c)}</option>)}
-                  </select>
-                  <button className="remove-btn" onClick={() => removeAction(i)}>✕</button>
+                {!currentRoom && (
+                  <div className="form-group">
+                    <label>Assign to Room</label>
+                    <select 
+                      value={form.room} 
+                      onChange={e => setForm({ ...form, room: e.target.value })}
+                    >
+                      <option value="Global">Global / All Rooms</option>
+                      {rooms.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div className="setup-section">
+                <div className="setup-header">
+                  <div className="step-num">2</div>
+                  <div className="step-info">
+                    <h3>Conditions</h3>
+                    <p>When should this automation trigger?</p>
+                  </div>
+                  <button className="add-btn-round" onClick={addCond} title="Add Condition">+</button>
                 </div>
-              ))}
+
+                <div className="logic-config">
+                  <label>Trigger when</label>
+                  <select value={form.conditionLogic} onChange={e => setForm({ ...form, conditionLogic: e.target.value })}>
+                    <option value="all">ALL conditions are met</option>
+                    <option value="any">ANY condition is met</option>
+                  </select>
+                </div>
+
+                <div className="items-list">
+                  {form.conditions.map((c, i) => (
+                    <div className="item-card cond-item" key={i}>
+                      <div className="item-controls">
+                        <select value={c.sensor} onChange={e => updateCond(i, 'sensor', e.target.value)}>
+                          {SENSORS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <select value={c.operator} onChange={e => updateCond(i, 'operator', e.target.value)}>
+                          {Object.entries(OPS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                        </select>
+                        {c.sensor === 'motion' ? (
+                          <select value={c.value} onChange={e => updateCond(i, 'value', e.target.value)}>
+                            <option value="1">Detected</option>
+                            <option value="0">No Motion</option>
+                          </select>
+                        ) : (
+                          <input type="number" value={c.value} onChange={e => updateCond(i, 'value', e.target.value)} />
+                        )}
+                      </div>
+                      <button className="item-remove" onClick={() => removeCond(i)}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="setup-section">
+                <div className="setup-header">
+                  <div className="step-num">3</div>
+                  <div className="step-info">
+                    <h3>Actions</h3>
+                    <p>What should happen when triggered?</p>
+                  </div>
+                  <button className="add-btn-round" onClick={addAction} title="Add Action">+</button>
+                </div>
+
+                <div className="items-list">
+                  {form.actions.map((a, i) => {
+                    const targetDev = allDevices.find(d => d.deviceId === a.targetDeviceId);
+                    let availableCommands = DEVICE_COMMANDS.default;
+                    if (targetDev) {
+                      if (targetDev.deviceId.startsWith('BSQ')) availableCommands = DEVICE_COMMANDS.switch;
+                      else if (targetDev.type === 'fan') availableCommands = DEVICE_COMMANDS.fan;
+                      else if (targetDev.type === 'light') availableCommands = DEVICE_COMMANDS.light;
+                    }
+
+                    return (
+                      <div className="item-card action-item-card" key={i}>
+                        <div className="action-main-line">
+                          <select value={a.targetDeviceId} onChange={e => updateAction(i, 'targetDeviceId', e.target.value)}>
+                            <option value="">Select Device...</option>
+                            {allDevices.map(d => <option key={d.deviceId} value={d.deviceId}>{d.title}</option>)}
+                          </select>
+
+                          {targetDev && targetDev.deviceId.startsWith('BSQ') && (
+                            <select 
+                              value={a.subDeviceIndex || 0} 
+                              onChange={e => updateAction(i, 'subDeviceIndex', Number(e.target.value))}
+                            >
+                              {targetDev.subDevices.map((sd, idx) => (
+                                <option key={idx} value={idx}>{sd.label || `${sd.type} ${idx + 1}`}</option>
+                              ))}
+                            </select>
+                          )}
+
+                          <select value={a.command} onChange={e => updateAction(i, 'command', e.target.value)}>
+                            {availableCommands.map(c => <option key={c} value={c}>{fmtCmd(c)}</option>)}
+                          </select>
+                          <button className="item-remove" onClick={() => removeAction(i)}>✕</button>
+                        </div>
+
+                        {a.command === 'set_speed' && (
+                          <div className="action-params-modern">
+                            <div className="param-info">
+                              <span className="label">Fan Speed</span>
+                              <span className="val">{a.params?.speed || 1}</span>
+                            </div>
+                            <input 
+                              type="range" min="1" max="5" 
+                              value={a.params?.speed || 1} 
+                              onChange={e => updateAction(i, 'params', { ...a.params, speed: Number(e.target.value) })} 
+                            />
+                          </div>
+                        )}
+
+                        {a.command === 'set_brightness' && (
+                          <div className="action-params-modern">
+                            <div className="param-info">
+                              <span className="label">Brightness</span>
+                              <span className="val">{Math.round(((a.params?.brightness || 255) / 255) * 100)}%</span>
+                            </div>
+                            <input 
+                              type="range" min="0" max="255" 
+                              value={a.params?.brightness || 255} 
+                              onChange={e => updateAction(i, 'params', { ...a.params, brightness: Number(e.target.value) })} 
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
               
-              <div className="form-divider"></div>
-              <div className="form-group">
-                <label className="checkbox-label large">
+              <div className="setup-section settings">
+                <div className="form-group cooldown">
+                  <label>Execution Cooldown</label>
+                  <div className="cooldown-input">
+                    <input type="number" value={form.cooldownSeconds} onChange={e => setForm({ ...form, cooldownSeconds: Number(e.target.value) })} />
+                    <span>seconds</span>
+                  </div>
+                </div>
+
+                <label className="global-toggle">
                   <input 
                     type="checkbox" 
                     checked={form.room === 'Global'} 
-                    onChange={e => setForm({ ...form, room: e.target.checked ? 'Global' : currentRoom?.name || 'Global' })} 
+                    onChange={e => {
+                      const isChecked = e.target.checked;
+                      setForm(prev => ({ 
+                        ...prev, 
+                        room: isChecked ? 'Global' : (currentRoom ? currentRoom.name : prev.room === 'Global' ? (rooms[0]?.name || 'Global') : prev.room)
+                      }));
+                    }} 
                   />
-                  <span>🌍 Apply this automation to ALL rooms</span>
+                  <div className="toggle-content">
+                    <span className="title">🌍 Apply to ALL rooms</span>
+                    <span className="desc">This rule will monitor sensors in all rooms</span>
+                  </div>
                 </label>
               </div>
             </div>

@@ -69,7 +69,7 @@ const AddRoomModal = ({ isOpen, onClose, onAdd }) => {
           z-index: 1000;
         }
         .modal-content {
-          background: white;
+          background: var(--bg-card);
           width: 90%;
           max-width: 400px;
           border-radius: 24px;
@@ -91,7 +91,7 @@ const AddRoomModal = ({ isOpen, onClose, onAdd }) => {
         .form-group input:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1); }
         
         .icon-selector { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
-        .icon-btn { height: 44px; font-size: 20px; background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; transition: var(--transition); }
+        .icon-btn { height: 44px; font-size: 20px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; transition: var(--transition); }
         .icon-btn:hover { background: #f1f5f9; }
         .icon-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
         

@@ -27,12 +27,19 @@ const conditionSchema = new mongoose.Schema({
 const actionSchema = new mongoose.Schema({
   targetDevice: {
     type: String,
+  },
+  targetDeviceId: {
+    type: String,
     required: true,
+  },
+  subDeviceIndex: {
+    type: Number, // For multi-channel devices like touch panels
+    default: null,
   },
   command: {
     type: String,
     required: true,
-    enum: ['turn_on', 'turn_off', 'set_brightness', 'set_color', 'set_effect'],
+    enum: ['turn_on', 'turn_off', 'set_brightness', 'set_color', 'set_effect', 'set_speed', 'relay_toggle'],
   },
   params: {
     type: mongoose.Schema.Types.Mixed,

@@ -23,11 +23,12 @@ export function getMqttClient() {
 }
 
 /**
- * Publish a command to the physical MQTT light.
+ * Publish a command to a specific device topic.
+ * @param {string} topic - The MQTT topic to publish to
  * @param {object} payload - The JSON payload to send
  * @returns {Promise<boolean>} - Whether the publish succeeded
  */
-export function publishToLight(payload) {
+export function publishToTopic(topic, payload) {
   return new Promise((resolve, reject) => {
     if (!_mqttClient || !_mqttClient.connected) {
       console.warn('[MQTT BRIDGE] MQTT client not connected, skipping publish');
@@ -35,15 +36,21 @@ export function publishToLight(payload) {
     }
 
     const message = JSON.stringify(payload);
-    _mqttClient.publish(MQTT_COMMAND_TOPIC, message, (err) => {
+    _mqttClient.publish(topic, message, (err) => {
       if (err) {
-        console.error('[MQTT BRIDGE] Publish error:', err.message);
+        console.error(`[MQTT BRIDGE] Publish error on ${topic}:`, err.message);
         return reject(err);
       }
-      console.log(`[MQTT BRIDGE] Published to ${MQTT_COMMAND_TOPIC}: ${message}`);
+      console.log(`[MQTT BRIDGE] Published to ${topic}: ${message}`);
       return resolve(true);
     });
   });
+}
+
+// Keep a wrapper for the legacy light for compatibility if needed, 
+// but we should migrate away from it.
+export function publishToLight(payload) {
+  return publishToTopic(MQTT_COMMAND_TOPIC, payload);
 }
 
 export { MQTT_COMMAND_TOPIC };

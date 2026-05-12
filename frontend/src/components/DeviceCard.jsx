@@ -1,9 +1,9 @@
 import React from 'react';
 
-const DeviceCard = ({ title, status, icon, type, value, onToggle, onAction }) => {
+const DeviceCard = ({ title, status, on, icon, type, value, timerRemaining, onToggle, onAction }) => {
   return (
     <div 
-      className={`device-card ${status ? 'on' : 'off'}`}
+      className={`device-card ${status ? 'online' : 'offline'}`}
       onClick={(e) => {
         // Only trigger if not clicking the toggle labels or checkbox
         if (e.target.tagName !== 'LABEL' && e.target.tagName !== 'INPUT') {
@@ -12,7 +12,7 @@ const DeviceCard = ({ title, status, icon, type, value, onToggle, onAction }) =>
       }}
     >
       <div className="card-header">
-        <div className="icon-box">{icon}</div>
+        <div className={`icon-box ${on ? 'power-on' : 'power-off'}`}>{icon}</div>
         <div className="card-actions">
           <button 
             className="action-btn edit-btn" 
@@ -35,11 +35,26 @@ const DeviceCard = ({ title, status, icon, type, value, onToggle, onAction }) =>
             🗑️
           </button>
         </div>
+        {timerRemaining > 0 && (
+          <div className="timer-badge" title="Timer Active">
+            ⏱️ {Math.ceil(timerRemaining / 60)}m
+          </div>
+        )}
       </div>
 
       <div className="card-body">
-        <h3>{title}</h3>
-        <p>{status ? 'Active' : 'Offline'}</p>
+        <div className="device-info">
+          <h3>{title}</h3>
+          <div className={`connectivity-status ${status ? 'online' : 'offline'}`}>
+            <span className="dot"></span>
+            {status ? 'Online' : 'Offline'}
+          </div>
+        </div>
+        <div className="power-indicator">
+          <span className={`power-tag ${on ? 'active' : 'inactive'}`}>
+            {on ? 'ON' : 'OFF'}
+          </span>
+        </div>
       </div>
       {status && type === 'slider' && (
         <div className="card-footer">
@@ -70,9 +85,13 @@ const DeviceCard = ({ title, status, icon, type, value, onToggle, onAction }) =>
           transform: translateY(-4px);
           box-shadow: var(--shadow);
         }
-        .device-card.on {
+        .device-card.online {
           border-color: var(--primary);
-          background: linear-gradient(145deg, #ffffff 0%, #f0f7ff 100%);
+        }
+        .device-card.offline {
+          opacity: 0.8;
+          border-color: var(--border);
+          background: var(--bg-secondary);
         }
         .card-header {
           display: flex;
@@ -83,48 +102,64 @@ const DeviceCard = ({ title, status, icon, type, value, onToggle, onAction }) =>
           width: 44px;
           height: 44px;
           background: var(--bg-main);
-          border-radius: 10px;
+          border-radius: 12px;
           display: flex;
           align-items: center;
           justify-content: center;
           font-size: 20px;
           transition: var(--transition);
+          border: 1px solid var(--border);
         }
-        .on .icon-box {
-          background: var(--primary);
+        .icon-box.power-on {
+          background: linear-gradient(135deg, var(--primary), #3b82f6);
           color: white;
+          border-color: transparent;
+          box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
         }
-        .card-actions {
-          display: flex;
-          gap: 4px;
-        }
-        .action-btn {
-          background: none;
-          font-size: 14px;
-          opacity: 0;
-          transition: var(--transition);
-          padding: 8px;
-          border-radius: 8px;
-        }
-        .device-card:hover .action-btn {
-          opacity: 0.5;
-        }
-        .action-btn:hover {
-          opacity: 1 !important;
-          background: #f1f5f9;
-        }
-        .delete-btn:hover {
-          background: #fee2e2 !important;
-        }
-        .card-body h3 {
-          font-size: 16px;
-          font-weight: 600;
-          margin-bottom: 4px;
-        }
-        .card-body p {
-          font-size: 13px;
+        .icon-box.power-off {
+          background: var(--bg-tertiary);
           color: var(--text-muted);
         }
+        
+        .card-body {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-top: 4px;
+        }
+        .device-info h3 {
+          font-size: 16px;
+          font-weight: 700;
+          margin-bottom: 2px;
+          color: var(--text-main);
+        }
+        .connectivity-status {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+        .connectivity-status.online { color: #16a34a; }
+        .connectivity-status.offline { color: #94a3b8; }
+        .connectivity-status .dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+        }
+        .connectivity-status.online .dot { background: #22c55e; box-shadow: 0 0 8px #22c55e; }
+        .connectivity-status.offline .dot { background: #94a3b8; }
+
+        .power-tag {
+          font-size: 10px;
+          font-weight: 800;
+          padding: 2px 8px;
+          border-radius: 6px;
+        }
+        .power-tag.active { background: #dcfce7; color: #166534; }
+        .power-tag.inactive { background: #f1f5f9; color: #475569; }
         .card-footer {
           display: flex;
           align-items: center;
@@ -140,7 +175,7 @@ const DeviceCard = ({ title, status, icon, type, value, onToggle, onAction }) =>
           display: block;
           width: 44px;
           height: 24px;
-          background: #cbd5e1;
+          background: var(--border);
           border-radius: 12px;
           position: relative;
           cursor: pointer;
@@ -151,7 +186,7 @@ const DeviceCard = ({ title, status, icon, type, value, onToggle, onAction }) =>
           position: absolute;
           width: 18px;
           height: 18px;
-          background: white;
+          background: var(--bg-card);
           border-radius: 50%;
           top: 3px;
           left: 3px;
@@ -159,6 +194,19 @@ const DeviceCard = ({ title, status, icon, type, value, onToggle, onAction }) =>
         }
         .toggle-box input:checked + label { background: var(--primary); }
         .toggle-box input:checked + label:after { left: 23px; }
+
+        .timer-badge {
+          background: #fef3c7;
+          color: #92400e;
+          font-size: 10px;
+          font-weight: 800;
+          padding: 4px 8px;
+          border-radius: 100px;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          border: 1px solid #fcd34d;
+        }
       `}</style>
     </div>
   );

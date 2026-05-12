@@ -1,5 +1,5 @@
 import Device from '../models/Device.js';
-import { publishToLight } from '../services/mqttManager.js';
+import { publishToTopic } from '../services/mqttManager.js';
 
 /**
  * Handle SYNC intent
@@ -218,8 +218,9 @@ async function handleExecute(requestId, payload) {
             mqttPayload.effect = updatedDevice.effect;
           }
 
-          await publishToLight(mqttPayload);
-          console.log(`[MQTT BRIDGE] Sent to physical light:`, mqttPayload);
+          const targetTopic = updatedDevice.topic || `smarthome/${updatedDevice.type}/${updatedDevice.deviceId}`;
+          await publishToTopic(targetTopic, mqttPayload);
+          console.log(`[MQTT BRIDGE] Sent to topic ${targetTopic}:`, mqttPayload);
         } catch (mqttErr) {
           console.error(`[MQTT BRIDGE] Failed to send to physical light:`, mqttErr.message);
           // Don't fail the Google response — the DB is already updated
