@@ -40,6 +40,10 @@ const deviceSchema = new mongoose.Schema({
     type: Number,
     default: 16777215, 
   },
+  speed: {
+    type: Number,
+    default: 1,
+  },
   effect: {
     type: String,
     default: 'solid',

@@ -1,129 +1,292 @@
 import Device from '../models/Device.js';
 import { publishToTopic } from '../services/mqttManager.js';
 
-/**
- * Handle SYNC intent
- * Returns the list of devices the user has linked to Google Assistant.
- */
-function handleSync(requestId) {
+// ═══════════════════════════════════════════════════════════════════════
+//  DEVICE TYPE MAPPING
+//  Maps your internal device types → Google Home types, traits, and attributes.
+//  To add a new device type, just add an entry here. Nothing else changes.
+// ═══════════════════════════════════════════════════════════════════════
+const DEVICE_TYPE_MAP = {
+  'rgbw': {
+    googleType: 'action.devices.types.LIGHT',
+    traits: [
+      'action.devices.traits.OnOff',
+      'action.devices.traits.Brightness',
+      'action.devices.traits.ColorSetting',
+      'action.devices.traits.Modes',
+    ],
+    attributes: {
+      colorModel: 'rgb',
+      colorTemperatureRange: { temperatureMinK: 2000, temperatureMaxK: 9000 },
+      availableModes: [{
+        name: 'lighting_mode',
+        name_values: [{ name_synonym: ['lighting mode', 'light mode', 'mode'], lang: 'en' }],
+        settings: [
+          { setting_name: 'solid', setting_values: [{ setting_synonym: ['manual', 'normal', 'solid'], lang: 'en' }] },
+          { setting_name: 'auto', setting_values: [{ setting_synonym: ['auto', 'automatic', 'sensor'], lang: 'en' }] },
+          { setting_name: 'auto_white', setting_values: [{ setting_synonym: ['white', 'pure white', 'reading'], lang: 'en' }] },
+        ],
+        ordered: false,
+      }],
+    },
+  },
+  'light': {
+    googleType: 'action.devices.types.LIGHT',
+    traits: [
+      'action.devices.traits.OnOff',
+      'action.devices.traits.Brightness',
+      'action.devices.traits.Modes',
+    ],
+    attributes: {
+      availableModes: [{
+        name: 'lighting_mode',
+        name_values: [{ name_synonym: ['lighting mode', 'light mode', 'mode'], lang: 'en' }],
+        settings: [
+          { setting_name: 'solid', setting_values: [{ setting_synonym: ['manual', 'normal', 'solid'], lang: 'en' }] },
+          { setting_name: 'auto', setting_values: [{ setting_synonym: ['auto', 'automatic', 'sensor'], lang: 'en' }] },
+        ],
+        ordered: false,
+      }],
+    },
+  },
+  'plug': {
+    googleType: 'action.devices.types.OUTLET',
+    traits: ['action.devices.traits.OnOff'],
+    attributes: {},
+  },
+  'switch': {
+    googleType: 'action.devices.types.SWITCH',
+    traits: ['action.devices.traits.OnOff'],
+    attributes: {},
+  },
+  'curtain': {
+    googleType: 'action.devices.types.BLINDS',
+    traits: [
+      'action.devices.traits.OpenClose',
+    ],
+    attributes: {
+      discreteOnlyOpenClose: true, // We only support open/close, not percentages
+      openDirection: ['UP', 'DOWN'],
+    },
+  },
+  'touch-panel': {
+    googleType: 'action.devices.types.SWITCH',
+    traits: ['action.devices.traits.OnOff'],
+    attributes: {},
+  },
+  'fan': {
+    googleType: 'action.devices.types.FAN',
+    traits: [
+      'action.devices.traits.OnOff',
+      'action.devices.traits.FanSpeed',
+    ],
+    attributes: {
+      availableFanSpeeds: {
+        speeds: [
+          { speed_name: '1', speed_values: [{ speed_synonym: ['low', 'speed 1', 'one'], lang: 'en' }] },
+          { speed_name: '2', speed_values: [{ speed_synonym: ['medium low', 'speed 2', 'two'], lang: 'en' }] },
+          { speed_name: '3', speed_values: [{ speed_synonym: ['medium', 'speed 3', 'three'], lang: 'en' }] },
+          { speed_name: '4', speed_values: [{ speed_synonym: ['medium high', 'speed 4', 'four'], lang: 'en' }] },
+          { speed_name: '5', speed_values: [{ speed_synonym: ['high', 'speed 5', 'five', 'max'], lang: 'en' }] },
+        ],
+        ordered: true,
+      },
+      reversible: false,
+    },
+  },
+};
+
+// Fallback for unknown types — at minimum they can be turned on/off
+const DEFAULT_TYPE_MAP = {
+  googleType: 'action.devices.types.SWITCH',
+  traits: ['action.devices.traits.OnOff'],
+  attributes: {},
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════
+//  TOPIC RESOLVER
+//  Determines the correct MQTT topic for a given device.
+// ═══════════════════════════════════════════════════════════════════════
+function resolveDeviceTopic(device) {
+  // If the device has a custom topic stored in DB, use it
+  if (device.topic) return device.topic;
+
+  const id = device.deviceId;
+  const type = device.type;
+
+  if (type === 'rgbw' || type === 'light') {
+    return `smart_home/rgbw/${id}/command`;
+  }
+  if (id.startsWith('B3E') || id.startsWith('B1E')) {
+    return `energy-meter/three-phase/command/${id}`;
+  }
+  if (id.startsWith('BSP') || type === 'plug' || type === 'switch') {
+    return `smart-switch/command/${id}`;
+  }
+  if (id.startsWith('BSQ') || type === 'touch-panel') {
+    return `touch-panel/${id}/switch/command`;
+  }
+  if (type === 'curtain') {
+    return `touch-panel/${id}/switch/command`;
+  }
+
+  return `smarthome/${type}/${id}/command`;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+//  HANDLE SYNC — Dynamic, reads all devices from MongoDB
+// ═══════════════════════════════════════════════════════════════════════
+async function handleSync(requestId) {
+  const allDevices = await Device.find({ isConfigured: true });
+  const googleDevices = [];
+
+  allDevices.forEach(device => {
+    // Check if it's a touch panel with sub-devices
+    if (device.type === 'touch-panel' && device.subDevices && device.subDevices.length > 0) {
+      device.subDevices.forEach(sd => {
+        const typeConfig = DEVICE_TYPE_MAP[sd.type] || DEVICE_TYPE_MAP['switch'];
+        
+        googleDevices.push({
+          id: `${device.deviceId}_${sd.index}`,
+          type: typeConfig.googleType,
+          traits: typeConfig.traits,
+          attributes: typeConfig.attributes,
+          name: {
+            defaultNames: [sd.label || `${device.title} ${sd.type} ${sd.index}`],
+            name: sd.label || `${device.title} ${sd.type} ${sd.index}`,
+            nicknames: [sd.label || `${device.title} ${sd.type} ${sd.index}`],
+          },
+          willReportState: false,
+          roomHint: device.room || 'Unassigned',
+          deviceInfo: {
+            manufacturer: 'Coral Innovations',
+            model: `CI-subdevice-${sd.type}`,
+            hwVersion: '1.0',
+            swVersion: '2.0',
+          },
+        });
+      });
+    } else {
+      // Standard device
+      const typeConfig = DEVICE_TYPE_MAP[device.type] || DEFAULT_TYPE_MAP;
+      googleDevices.push({
+        id: device.deviceId,
+        type: typeConfig.googleType,
+        traits: typeConfig.traits,
+        attributes: typeConfig.attributes,
+        name: {
+          defaultNames: [device.title],
+          name: device.title,
+          nicknames: [device.title],
+        },
+        willReportState: false,
+        roomHint: device.room || 'Unassigned',
+        deviceInfo: {
+          manufacturer: 'Coral Innovations',
+          model: `CI-${device.type}-${device.deviceId}`,
+          hwVersion: '1.0',
+          swVersion: '2.0',
+        },
+      });
+    }
+  });
+
   const syncResponse = {
     requestId,
     payload: {
       agentUserId: 'smarthome-user-1',
-      devices: [
-        {
-          id: 'light-1',
-          type: 'action.devices.types.LIGHT',
-          traits: [
-            'action.devices.traits.OnOff',
-            'action.devices.traits.Brightness',
-            'action.devices.traits.ColorSetting',
-            'action.devices.traits.Modes',
-          ],
-          attributes: {
-            colorModel: 'rgb',
-            colorTemperatureRange: {
-              temperatureMinK: 2000,
-              temperatureMaxK: 9000
-            },
-            availableModes: [{
-              name: 'lighting_mode',
-              name_values: [{
-                name_synonym: ['lighting mode', 'light mode', 'mode'],
-                lang: 'en'
-              }],
-              settings: [{
-                setting_name: 'solid',
-                setting_values: [{
-                  setting_synonym: ['manual', 'normal', 'solid'],
-                  lang: 'en'
-                }]
-              }, {
-                setting_name: 'auto',
-                setting_values: [{
-                  setting_synonym: ['auto', 'automatic', 'sensor'],
-                  lang: 'en'
-                }]
-              }, {
-                setting_name: 'auto_white',
-                setting_values: [{
-                  setting_synonym: ['white', 'pure white', 'reading'],
-                  lang: 'en'
-                }]
-              }],
-              ordered: false
-            }]
-          },
-          name: {
-            defaultNames: ['Smart Light'],
-            name: 'Smart Light',
-            nicknames: ['Living Room Light'],
-          },
-          willReportState: false,
-          roomHint: 'Living Room',
-          deviceInfo: {
-            manufacturer: 'SmartHome Inc',
-            model: 'SH-Light-1',
-            hwVersion: '1.0',
-            swVersion: '1.0',
-          },
-        },
-      ],
+      devices: googleDevices,
     },
   };
 
-  console.log('[SYNC Response]', JSON.stringify(syncResponse, null, 2));
+  console.log(`[SYNC] Returning ${googleDevices.length} devices to Google Home`);
   return syncResponse;
 }
 
-/**
- * Handle QUERY intent
- * Fetches current device state from MongoDB and returns it.
- */
+
+// ═══════════════════════════════════════════════════════════════════════
+//  HANDLE QUERY — Dynamic, builds state based on device type
+// ═══════════════════════════════════════════════════════════════════════
 async function handleQuery(requestId, payload) {
   const { devices } = payload;
   const deviceStates = {};
 
   for (const device of devices) {
-    const dbDevice = await Device.findOne({ deviceId: device.id });
+    let dbDevice;
+    let subDevice;
+    let mainDeviceId = device.id;
+    let subIndex = null;
 
-    if (dbDevice) {
-      deviceStates[device.id] = {
-        on: dbDevice.on,
-        brightness: dbDevice.brightness,
-        color: {
-          spectrumRgb: dbDevice.spectrumRgb,
-        },
-        currentModeSettings: {
-          lighting_mode: dbDevice.effect || 'solid'
-        },
-        online: true,
-        status: 'SUCCESS',
-      };
+    if (device.id.includes('_')) {
+      const parts = device.id.split('_');
+      mainDeviceId = parts[0];
+      subIndex = parseInt(parts[1]);
+      dbDevice = await Device.findOne({ deviceId: mainDeviceId });
+      if (dbDevice && dbDevice.subDevices) {
+        subDevice = dbDevice.subDevices.find(sd => sd.index === subIndex);
+      }
     } else {
+      dbDevice = await Device.findOne({ deviceId: mainDeviceId });
+    }
+
+    if (!dbDevice || (subIndex !== null && !subDevice)) {
       deviceStates[device.id] = {
         online: false,
         status: 'ERROR',
         errorCode: 'deviceNotFound',
       };
+      continue;
     }
+
+    // Build state object
+    const state = {
+      online: true,
+      status: 'SUCCESS',
+      on: subIndex !== null ? subDevice.on : dbDevice.on,
+    };
+
+    const type = subIndex !== null ? subDevice.type : dbDevice.type;
+    const typeConfig = DEVICE_TYPE_MAP[type] || DEFAULT_TYPE_MAP;
+
+    // Traits handling
+    if (typeConfig.traits.includes('action.devices.traits.Brightness')) {
+      state.brightness = dbDevice.brightness || 0;
+    }
+
+    if (typeConfig.traits.includes('action.devices.traits.ColorSetting')) {
+      state.color = { spectrumRgb: dbDevice.spectrumRgb || 16777215 };
+    }
+
+    if (typeConfig.traits.includes('action.devices.traits.Modes')) {
+      state.currentModeSettings = { lighting_mode: dbDevice.effect || 'solid' };
+    }
+
+    if (typeConfig.traits.includes('action.devices.traits.FanSpeed')) {
+      state.currentFanSpeedSetting = subIndex !== null ? String(subDevice.speed || 1) : String(dbDevice.speed || 1);
+    }
+
+    if (typeConfig.traits.includes('action.devices.traits.OpenClose')) {
+      state.openPercent = dbDevice.on ? 100 : 0;
+    }
+
+    deviceStates[device.id] = state;
   }
 
   const queryResponse = {
     requestId,
-    payload: {
-      devices: deviceStates,
-    },
+    payload: { devices: deviceStates },
   };
 
-  console.log('[QUERY Response]', JSON.stringify(queryResponse, null, 2));
+  console.log(`[QUERY] Handled status for ${Object.keys(deviceStates).length} devices`);
   return queryResponse;
 }
 
-/**
- * Handle EXECUTE intent
- * Processes commands (OnOff, BrightnessAbsolute) and updates MongoDB.
- */
+
+// ═══════════════════════════════════════════════════════════════════════
+//  HANDLE EXECUTE — Generic command processor for all device types
+// ═══════════════════════════════════════════════════════════════════════
 async function handleExecute(requestId, payload) {
   const { commands } = payload;
   const results = [];
@@ -131,135 +294,194 @@ async function handleExecute(requestId, payload) {
   for (const command of commands) {
     for (const device of command.devices) {
       for (const execution of command.execution) {
-        const update = {};
+        
+        let dbDevice;
+        let mainDeviceId = device.id;
+        let subIndex = null;
 
-        switch (execution.command) {
-          case 'action.devices.commands.OnOff':
-            update.on = execution.params.on;
-            break;
-
-          case 'action.devices.commands.BrightnessAbsolute':
-            update.brightness = execution.params.brightness;
-            break;
-
-          case 'action.devices.commands.ColorAbsolute':
-            if (execution.params.color && execution.params.color.spectrumRGB) {
-              update.spectrumRgb = execution.params.color.spectrumRGB;
-              update.effect = 'solid'; // Change color sets it back to manual solid
-            }
-            break;
-
-          case 'action.devices.commands.SetModes':
-            if (execution.params.updateModeSettings && execution.params.updateModeSettings.lighting_mode) {
-              update.effect = execution.params.updateModeSettings.lighting_mode;
-            }
-            break;
-
-          default:
-            console.warn(`[EXECUTE] Unknown command: ${execution.command}`);
-            results.push({
-              ids: [device.id],
-              status: 'ERROR',
-              errorCode: 'functionNotSupported',
-            });
-            continue;
+        if (device.id.includes('_')) {
+          const parts = device.id.split('_');
+          mainDeviceId = parts[0];
+          subIndex = parseInt(parts[1]);
         }
 
-        // Update the device in MongoDB
-        const updatedDevice = await Device.findOneAndUpdate(
-          { deviceId: device.id },
-          update,
-          { new: true, upsert: true }
-        );
+        dbDevice = await Device.findOne({ deviceId: mainDeviceId });
+        
+        if (!dbDevice) {
+          results.push({
+            ids: [device.id],
+            status: 'ERROR',
+            errorCode: 'deviceNotFound',
+          });
+          continue;
+        }
 
-        console.log(`[EXECUTE] Updated device ${device.id}:`, update);
+        const dbUpdate = {};
+        const mqttPayload = { entityId: mainDeviceId };
+        let mqttTopic = resolveDeviceTopic(dbDevice);
 
-        // ─── Bridge to physical MQTT light ───
-        try {
-          const mqttPayload = {};
+        // Special handling for sub-devices (Touch Panel)
+        if (subIndex !== null) {
+          mqttTopic = `touch-panel/${mainDeviceId}/switch/command`;
+          mqttPayload.type = 'switch';
+          
+          let executionStatus = { online: true };
 
           if (execution.command === 'action.devices.commands.OnOff') {
-            mqttPayload.state = updatedDevice.on ? 'ON' : 'OFF';
-            // When turning ON, send current brightness; when OFF, send 0
-            mqttPayload.brightness = updatedDevice.on
-              ? Math.round((updatedDevice.brightness / 100) * 255)
-              : 0;
-            
-            // Send current color when turning ON to avoid defaulting to black
-            if (updatedDevice.on) {
-              const rgb = updatedDevice.spectrumRgb || 16777215;
-              mqttPayload.color = [
-                (rgb >> 16) & 0xFF,
-                (rgb >> 8) & 0xFF,
-                rgb & 0xFF,
-                255 // Add white channel for better glow
-              ];
+            const on = execution.params.on;
+            mqttPayload.value = `${subIndex}${on ? '1' : '0'}`;
+            await Device.updateOne(
+              { deviceId: mainDeviceId, "subDevices.index": subIndex },
+              { $set: { "subDevices.$.on": on } }
+            );
+            executionStatus.on = on;
+          } else if (execution.command === 'action.devices.commands.SetFanSpeed') {
+            let speed = parseInt(execution.params.fanSpeed);
+            if (isNaN(speed)) {
+              const s = String(execution.params.fanSpeed).toLowerCase();
+              if (s.includes('low')) speed = 1;
+              else if (s.includes('medium')) speed = 3;
+              else if (s.includes('high') || s.includes('max')) speed = 5;
+              else speed = 1; 
             }
+            mqttPayload.type = 'dimmer';
+            mqttPayload.dimmer = String(subIndex);
+            mqttPayload.value = String(speed);
+            await Device.updateOne(
+              { deviceId: mainDeviceId, "subDevices.index": subIndex },
+              { $set: { "subDevices.$.on": speed > 0, "subDevices.$.speed": speed } }
+            );
+            executionStatus.on = speed > 0;
+            executionStatus.currentFanSpeedSetting = String(speed);
           }
 
-          if (execution.command === 'action.devices.commands.BrightnessAbsolute') {
-            mqttPayload.state = 'ON';
-            // Map Google's 0-100% to hardware's 0-255
-            mqttPayload.brightness = Math.round((updatedDevice.brightness / 100) * 255);
-          }
+          results.push({
+            ids: [device.id],
+            status: 'SUCCESS',
+            states: executionStatus
+          });
 
-          if (execution.command === 'action.devices.commands.ColorAbsolute') {
-            mqttPayload.state = 'ON';
-            mqttPayload.effect = 'solid';
-            const rgb = updatedDevice.spectrumRgb || 16777215;
-            const r = (rgb >> 16) & 0xFF;
-            const g = (rgb >> 8) & 0xFF;
-            const b = rgb & 0xFF;
-            mqttPayload.color = [r, g, b, 0];
+          // Publish sub-device command
+          try {
+            await publishToTopic(mqttTopic, mqttPayload);
+            console.log(`[EXECUTE] Sub-device command sent to ${mqttTopic}:`, mqttPayload);
+          } catch (err) {
+            console.error(`[EXECUTE] Sub-device MQTT failed:`, err.message);
           }
-
-          if (execution.command === 'action.devices.commands.SetModes') {
-            mqttPayload.state = 'ON';
-            mqttPayload.effect = updatedDevice.effect;
-          }
-
-          const targetTopic = updatedDevice.topic || `smarthome/${updatedDevice.type}/${updatedDevice.deviceId}`;
-          await publishToTopic(targetTopic, mqttPayload);
-          console.log(`[MQTT BRIDGE] Sent to topic ${targetTopic}:`, mqttPayload);
-        } catch (mqttErr) {
-          console.error(`[MQTT BRIDGE] Failed to send to physical light:`, mqttErr.message);
-          // Don't fail the Google response — the DB is already updated
+          continue;
         }
-        // ─────────────────────────────────────
+
+        // --- Standard Device Logic ---
+        const deviceType = dbDevice.type;
+        const isLight = deviceType === 'rgbw' || deviceType === 'light';
+        const isPlug = deviceType === 'plug' || deviceType === 'switch' ||
+                       dbDevice.deviceId.startsWith('BSP') ||
+                       dbDevice.deviceId.startsWith('B3E') ||
+                       dbDevice.deviceId.startsWith('B1E');
+
+        switch (execution.command) {
+          case 'action.devices.commands.OnOff': {
+            dbUpdate.on = execution.params.on;
+            if (isPlug) {
+              mqttPayload.relayStatus = execution.params.on ? 'ON' : 'OFF';
+            } else {
+              mqttPayload.state = execution.params.on ? 'ON' : 'OFF';
+            }
+            break;
+          }
+
+          case 'action.devices.commands.BrightnessAbsolute': {
+            dbUpdate.brightness = execution.params.brightness;
+            dbUpdate.on = true;
+            mqttPayload.state = 'ON';
+            mqttPayload.brightness = Math.round((execution.params.brightness / 100) * 255);
+            break;
+          }
+
+          case 'action.devices.commands.ColorAbsolute': {
+            if (execution.params.color && execution.params.color.spectrumRGB) {
+              const rgb = execution.params.color.spectrumRGB;
+              dbUpdate.spectrumRgb = rgb;
+              dbUpdate.on = true;
+              mqttPayload.state = 'ON';
+              mqttPayload.color = [(rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF, 0];
+            }
+            break;
+          }
+
+          case 'action.devices.commands.SetFanSpeed': {
+            let speed = parseInt(execution.params.fanSpeed);
+            if (isNaN(speed)) {
+              const s = String(execution.params.fanSpeed).toLowerCase();
+              if (s.includes('low')) speed = 1;
+              else if (s.includes('medium')) speed = 3;
+              else if (s.includes('high') || s.includes('max')) speed = 5;
+              else speed = 1; 
+            }
+            dbUpdate.speed = speed;
+            dbUpdate.on = speed > 0;
+            mqttPayload.type = 'dimmer';
+            mqttPayload.value = String(speed);
+            break;
+          }
+
+          case 'action.devices.commands.OpenClose': {
+            const openPercent = execution.params.openPercent;
+            mqttPayload.type = 'switch';
+            
+            if (openPercent > 0) {
+              // OPEN PULSE: 11 (start) -> 5s -> 10 (stop)
+              mqttPayload.value = '11';
+              dbUpdate.on = true;
+              setTimeout(async () => {
+                try {
+                  await publishToTopic(mqttTopic, { ...mqttPayload, value: '10' });
+                  console.log(`[CURTAIN] Auto-stop (10) sent for ${mainDeviceId}`);
+                } catch (err) {
+                  console.error(`[CURTAIN] Auto-stop failed:`, err.message);
+                }
+              }, 5000);
+            } else {
+              // CLOSE PULSE: 21 (start) -> 5s -> 20 (stop)
+              mqttPayload.value = '21';
+              dbUpdate.on = false;
+              setTimeout(async () => {
+                try {
+                  await publishToTopic(mqttTopic, { ...mqttPayload, value: '20' });
+                  console.log(`[CURTAIN] Auto-stop (20) sent for ${mainDeviceId}`);
+                } catch (err) {
+                  console.error(`[CURTAIN] Auto-stop failed:`, err.message);
+                }
+              }, 5000);
+            }
+            break;
+          }
+        }
+
+        // Update DB and publish for standard devices
+        const updatedDevice = await Device.findOneAndUpdate({ deviceId: mainDeviceId }, dbUpdate, { new: true });
+        try {
+          await publishToTopic(mqttTopic, mqttPayload);
+          console.log(`[EXECUTE] Standard command sent to ${mqttTopic}:`, mqttPayload);
+        } catch (err) {
+          console.error(`[EXECUTE] Standard MQTT failed:`, err.message);
+        }
 
         results.push({
           ids: [device.id],
           status: 'SUCCESS',
-          states: {
-            on: updatedDevice.on,
-            brightness: updatedDevice.brightness,
-            color: {
-              spectrumRgb: updatedDevice.spectrumRgb,
-            },
-            currentModeSettings: {
-              lighting_mode: updatedDevice.effect || 'solid'
-            },
-            online: true,
-          },
+          states: { online: true, on: updatedDevice.on }
         });
       }
     }
   }
 
-  const executeResponse = {
-    requestId,
-    payload: {
-      commands: results,
-    },
-  };
-
-  console.log('[EXECUTE Response]', JSON.stringify(executeResponse, null, 2));
-  return executeResponse;
+  return { requestId, payload: { commands: results } };
 }
 
-/**
- * Main fulfillment handler — routes incoming intents.
- */
+// ═══════════════════════════════════════════════════════════════════════
+//  MAIN FULFILLMENT HANDLER
+// ═══════════════════════════════════════════════════════════════════════
 export async function smarthomeFulfillment(req, res) {
   const { requestId, inputs } = req.body;
 
@@ -278,7 +500,7 @@ export async function smarthomeFulfillment(req, res) {
   try {
     switch (intent) {
       case 'action.devices.SYNC':
-        response = handleSync(requestId);
+        response = await handleSync(requestId);
         break;
 
       case 'action.devices.QUERY':
@@ -314,30 +536,28 @@ export async function smarthomeFulfillment(req, res) {
   }
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════
+//  OAUTH ENDPOINTS (unchanged)
+// ═══════════════════════════════════════════════════════════════════════
+
 /**
  * Fake OAuth authorization endpoint for Google Actions Console.
- * 
- * Google sends the user here with query params:
- *   - client_id, redirect_uri, state, response_type
- * 
- * We must redirect back to Google's redirect_uri with:
- *   ?code=FAKE_AUTH_CODE&state=<original_state>
  */
 export function fakeAuth(req, res) {
-  const { redirect_uri, state } = req.query;
+  const { client_id, redirect_uri, state } = req.query;
 
   console.log('[FAKEAUTH] Authorization endpoint hit');
   console.log('[FAKEAUTH] Query params:', JSON.stringify(req.query, null, 2));
+  console.log(`[FAKEAUTH] Client ID received: ${client_id}`);
 
   if (!redirect_uri) {
-    // If no redirect_uri (manual browser test), just show success
     return res.json({
       success: true,
       message: 'Fake authorization endpoint is working. Google will send redirect_uri param during actual linking.',
     });
   }
 
-  // Build the redirect URL back to Google with an authorization code
   const redirectUrl = new URL(redirect_uri);
   redirectUrl.searchParams.set('code', 'fake-auth-code');
   if (state) {
@@ -350,19 +570,15 @@ export function fakeAuth(req, res) {
 
 /**
  * Fake OAuth token endpoint for Google Actions Console.
- * 
- * Google calls this endpoint twice:
- *   1. To exchange authorization_code for access_token + refresh_token
- *   2. To use refresh_token to get a new access_token
  */
 export function fakeToken(req, res) {
-  const { grant_type } = req.body;
+  const { grant_type, client_id, client_secret } = req.body;
 
   console.log('[FAKETOKEN] Token endpoint hit');
   console.log('[FAKETOKEN] Body:', JSON.stringify(req.body, null, 2));
+  console.log(`[FAKETOKEN] Client ID received: ${client_id}`);
 
   if (grant_type === 'authorization_code') {
-    // Exchange auth code for tokens
     console.log('[FAKETOKEN] Exchanging authorization code for tokens');
     return res.json({
       token_type: 'bearer',
@@ -371,7 +587,6 @@ export function fakeToken(req, res) {
       expires_in: 3600,
     });
   } else if (grant_type === 'refresh_token') {
-    // Refresh the access token
     console.log('[FAKETOKEN] Refreshing access token');
     return res.json({
       token_type: 'bearer',
@@ -380,7 +595,6 @@ export function fakeToken(req, res) {
     });
   }
 
-  // Fallback — return tokens anyway
   console.log('[FAKETOKEN] Unknown grant_type, returning tokens anyway');
   return res.json({
     token_type: 'bearer',

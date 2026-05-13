@@ -40,6 +40,15 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Health Check
+// app.get('/', (req, res) => {
+//   res.status(200).json({ 
+//     status: 'online', 
+//     message: 'Smart Home Backend is running',
+//     timestamp: new Date().toISOString()
+//   });
+// });
+
 // Routes
 app.use('/', smarthomeRoutes);
 app.use('/api/automations', automationRoutes);
@@ -79,6 +88,7 @@ const startServer = async () => {
   // 5. Start Scheduler
   startScheduler(io);
 
+ 
   // 6. Subscribe to Custom Sensors
   try {
     const sensors = await Sensor.find();

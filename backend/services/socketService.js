@@ -87,7 +87,7 @@ export const initSocket = (io, mqttClient) => {
           { deviceId, "subDevices.index": subDeviceIndex },
           { $set: { "subDevices.$.on": value } }
         );
-      } else if (type === 'fan_speed') {
+      } else if (type === 'fan') {
         mqttPayload.type = 'dimmer';
         mqttPayload.dimmer = String(subDeviceIndex);
         mqttPayload.value = String(value);
