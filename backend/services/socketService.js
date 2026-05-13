@@ -214,12 +214,14 @@ export const initSocket = (io, mqttClient) => {
       const device = await Device.findOne({ deviceId });
       if (!device) return;
 
-      const topic = `smarthome/curtain/${deviceId}/command`;
-      // Payload is just the raw value as per requirement
-      const mqttPayload = { action: Number(action) };
+      const topic = `touch-panel/${deviceId}/switch/command`;
+      const mqttPayload = { 
+        type: 'switch',
+        value: String(action)
+      };
       
       await publishToTopic(topic, mqttPayload);
-      console.log(`[CURTAIN] Sent action ${action} to ${deviceId}`);
+      console.log(`[CURTAIN] Sent action ${action} to ${deviceId} on topic ${topic}`);
     });
 
     socket.on('force_white_mode', async (data) => {

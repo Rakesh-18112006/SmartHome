@@ -3,6 +3,7 @@ import { setMqttClient } from '../services/mqttManager.js';
 import { getState, updateState } from '../services/deviceState.js';
 import { updateSensorData, evaluateAutomations, getSensorData } from '../services/automationEngine.js';
 import Device from '../models/Device.js';
+import Sensor from '../models/Sensor.js';
 
 const MQTT_BROKER = process.env.MQTT_BROKER || 'mqtt://35.154.62.193:1883';
 const MQTT_STATUS_TOPIC = 'rgbw-light/1234/light/status';
@@ -31,6 +32,7 @@ export const connectMQTT = (io) => {
       'energy-meter/three-phase',
       'energy-meter/single-phase',
       'touch-panel/+/switch/status',
+      'touch-panel/+/ping/status',
       MQTT_STATUS_TOPIC
     ]);
   });
@@ -175,13 +177,27 @@ export const connectMQTT = (io) => {
           io.emit('sensor_data_update', getSensorData());
           await evaluateAutomations(io);
         }
-      } catch (e) {
-        console.error(`Error processing MQTT status for ${deviceId}`, e);
-      }
-    }
 
-    io.emit('mqtt_message', { topic, message: payload });
-  });
+    } catch (e) {
+      console.error(`Error processing MQTT status for ${deviceId}`, e);
+    }
+  }
+
+  // Handle custom sensors - this should run even if it's not a standard device
+  try {
+    const customSensor = await Sensor.findOne({ topic });
+    if (customSensor) {
+      customSensor.value = data; // Store raw value (number, object, etc.)
+      customSensor.lastUpdated = new Date();
+      await customSensor.save();
+      io.emit('custom_sensor_update', customSensor);
+    }
+  } catch (err) {
+    console.error(`Error processing custom sensor for ${topic}`, err);
+  }
+
+  io.emit('mqtt_message', { topic, message: payload });
+});
 
   mqttClient.on('error', (err) => {
     console.error('MQTT error:', err);

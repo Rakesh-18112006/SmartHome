@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import { Power, Search, LayoutDashboard, Settings, Plus, Activity, Thermometer, Moon, Sun } from 'lucide-react';
+import { Power, Search, LayoutDashboard, Settings, Plus, Activity, Thermometer, Moon, Sun, Radio } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import DeviceCard from './components/DeviceCard';
 import ColorControl from './components/ColorControl';
@@ -8,6 +8,8 @@ import Scenes from './components/Scenes';
 import AddRoomModal from './components/AddRoomModal';
 import ConfigureDeviceModal from './components/ConfigureDeviceModal';
 import ProvisioningModal from './components/ProvisioningModal';
+import SensorCard from './components/SensorCard';
+import AddSensorModal from './components/AddSensorModal';
 
 // Dynamic API Base URL for network access
 const API_BASE = `http://${window.location.hostname}:3000`;
@@ -30,7 +32,9 @@ const App = () => {
   const [rooms, setRooms] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
+  const [isSensorModalOpen, setIsSensorModalOpen] = useState(false);
   const [configuringDevice, setConfiguringDevice] = useState(null);
+  const [sensors, setSensors] = useState([]);
   const [currentRoom, setCurrentRoom] = useState(null);
   const [timerInfo, setTimerInfo] = useState({ remaining: 0, action: null });
   const [metrics, setMetrics] = useState({});
@@ -70,25 +74,62 @@ const App = () => {
   useEffect(() => {
     fetchDevices();
     fetchRooms();
+    fetchSensors();
   }, []);
-
-  const fetchRooms = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/rooms`);
-      const data = await res.json();
-      setRooms(data);
-    } catch (err) {
-      console.error('Failed to fetch rooms', err);
-    }
-  };
 
   const fetchDevices = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/devices`);
       const data = await res.json();
-      setDevices(data);
+      setDevices(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to fetch devices', err);
+      setDevices([]);
+    }
+  };
+
+  const fetchRooms = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/rooms`);
+      const data = await res.json();
+      setRooms(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to fetch rooms', err);
+      setRooms([]);
+    }
+  };
+
+  const fetchSensors = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/sensors`);
+      const data = await res.json();
+      setSensors(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Failed to fetch sensors', err);
+      setSensors([]);
+    }
+  };
+
+  const handleAddSensor = async (sensorData) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/sensors`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sensorData)
+      });
+      if (res.ok) fetchSensors();
+    } catch (err) {
+      console.error('Failed to add sensor', err);
+    }
+  };
+
+  const handleRemoveSensor = async (id) => {
+    if (!window.confirm('Remove this sensor?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/sensors/${id}`, { method: 'DELETE' });
+      if (res.ok) fetchSensors();
+    } catch (err) {
+      console.error('Failed to remove sensor', err);
     }
   };
 
@@ -169,46 +210,53 @@ const App = () => {
 
   useEffect(() => {
     fetchDevices();
+    fetchRooms();
+    fetchSensors();
+
     const refreshInterval = setInterval(fetchDevices, 5000);
+    
     socket.on('mqtt_status', (data) => setMqttStatus(data.status));
+    
     socket.on('device_state_update', (updatedDevice) => {
-      const now = new Date();
-      const lastSeen = updatedDevice.lastSeen ? new Date(updatedDevice.lastSeen) : null;
-      updatedDevice.isOnline = lastSeen && (now - lastSeen) < 45000;
-
-      setDevices(prev => prev.map(d => d.deviceId === updatedDevice.deviceId ? { ...updatedDevice, isOnline: updatedDevice.isOnline } : d));
-
-      if (selectedDevice && selectedDevice.deviceId === updatedDevice.deviceId) {
-        setSelectedDevice(updatedDevice);
-        if (!isInteracting.current) {
-          if (timerInfo.remaining > 0 && (updatedDevice.timerRemaining === 0 || !updatedDevice.timerRemaining)) {
-            showToast(`✅ Timer completed: ${updatedDevice.title} is now ${updatedDevice.on ? 'ON' : 'OFF'}`);
-          }
-          setLightStatus(updatedDevice.on);
-          setBrightness(updatedDevice.brightness);
-          setAutoMode(updatedDevice.effect === 'auto');
-          setCurrentLux(updatedDevice.lastLux || 0);
-          setTimerInfo({
-            remaining: updatedDevice.timerRemaining || 0,
-            action: updatedDevice.timerAction
-          });
-          setMetrics({
-            voltage: updatedDevice.voltage,
-            current: updatedDevice.current,
-            power: updatedDevice.power,
-            energy: updatedDevice.energy,
-            pf: updatedDevice.pf,
-            temp: updatedDevice.temperature
-          });
-        }
-      }
+      setDevices(prev => (Array.isArray(prev) ? prev : []).map(d => d.deviceId === updatedDevice.deviceId ? { ...updatedDevice, isOnline: true } : d));
     });
+
+    socket.on('custom_sensor_update', (updatedSensor) => {
+      setSensors(prev => (Array.isArray(prev) ? prev : []).map(s => s._id === updatedSensor._id ? updatedSensor : s));
+    });
+
     return () => {
       socket.off('mqtt_status');
       socket.off('device_state_update');
+      socket.off('custom_sensor_update');
       clearInterval(refreshInterval);
     };
-  }, [selectedDevice, timerInfo]);
+  }, []);
+
+  // Update selected device info when devices list changes
+  useEffect(() => {
+    if (selectedDevice) {
+      const updated = devices.find(d => d.deviceId === selectedDevice.deviceId);
+      if (updated && !isInteracting.current) {
+        setLightStatus(updated.on);
+        setBrightness(updated.brightness);
+        setAutoMode(updated.effect === 'auto');
+        setCurrentLux(updated.lastLux || 0);
+        setTimerInfo({
+          remaining: updated.timerRemaining || 0,
+          action: updated.timerAction
+        });
+        setMetrics({
+          voltage: updated.voltage,
+          current: updated.current,
+          power: updated.power,
+          energy: updated.energy,
+          pf: updated.pf,
+          temp: updated.temperature
+        });
+      }
+    }
+  }, [devices, selectedDevice]);
 
   const toggleLight = (val) => {
     setLightStatus(val);
@@ -636,6 +684,39 @@ const App = () => {
     );
   };
 
+  const renderSensorsSection = () => (
+    <div className="dashboard-section animate-fade-in">
+      <div className="section-header">
+        <div>
+          <h2>Custom Sensors</h2>
+          <p>Real-time telemetry from custom MQTT topics</p>
+        </div>
+        <button className="primary-btn" onClick={() => setIsSensorModalOpen(true)}>
+          <Plus size={20} />
+          Add Sensor
+        </button>
+      </div>
+      
+      <div className="devices-grid">
+        {sensors.length === 0 ? (
+          <div className="empty-state">
+            <Radio size={48} className="empty-icon" />
+            <p>No sensors added yet</p>
+            <button onClick={() => setIsSensorModalOpen(true)}>Configure first sensor</button>
+          </div>
+        ) : (
+          sensors.map(sensor => (
+            <SensorCard 
+              key={sensor._id} 
+              sensor={sensor} 
+              onRemove={handleRemoveSensor}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+
   const renderDashboard = () => (
     <div className="dashboard-view animate-slide-up">
       <div className="welcome-header">
@@ -663,8 +744,8 @@ const App = () => {
 
       {!currentRoom ? (
         <div className="rooms-grid">
-          {rooms.map(room => {
-            const roomDevices = devices.filter(d => d.room === room.name && d.isConfigured);
+          {(Array.isArray(rooms) ? rooms : []).map(room => {
+            const roomDevices = (Array.isArray(devices) ? devices : []).filter(d => d.room === room.name && d.isConfigured);
             const activeCount = roomDevices.filter(d => d.on).length;
             return (
               <div key={room.name} className="room-card-wrapper">
@@ -691,7 +772,7 @@ const App = () => {
       ) : (
         <div className="devices-view-content animate-slide-up">
           <div className="devices-grid">
-            {devices.filter(d => d.room === currentRoom.name && d.isConfigured).map(device => (
+            {(Array.isArray(devices) ? devices : []).filter(d => d.room === currentRoom.name && d.isConfigured).map(device => (
               <DeviceCard
                 key={device.deviceId}
                 title={device.title}
@@ -797,7 +878,7 @@ const App = () => {
         <div className="settings-card glass">
           <h3>🏠 Room Management</h3>
           <div className="rooms-list-mini">
-            {rooms.map(room => (
+            {(Array.isArray(rooms) ? rooms : []).map(room => (
               <div key={room.name} className="room-item-mini">
                 <span>{room.icon} {room.name}</span>
                 <button className="delete-btn-mini" onClick={() => handleRemoveRoom(room.name)}>Remove</button>
@@ -866,7 +947,7 @@ const App = () => {
                 <button className="action-btn-pill secondary" onClick={() => setSearchQuery('')}>Clear Search</button>
               </div>
               <div className="devices-grid">
-                {filteredDevices.map(device => (
+                {(Array.isArray(filteredDevices) ? filteredDevices : []).map(device => (
                   <DeviceCard
                     key={device.deviceId}
                     title={device.title}
@@ -886,17 +967,23 @@ const App = () => {
             </div>
           ) : selectedDevice ? (
             renderDetailView()
-          ) : activeTab === 'scenes' ? (
-            <Scenes socket={socket} rooms={rooms} allDevices={devices} onAddRoom={handleAddRoom} />
-          ) : activeTab === 'devices' ? (
-            renderDevicesView()
-          ) : activeTab === 'settings' ? (
-            renderSettingsView()
           ) : (
-            renderDashboard()
+            <>
+              {activeTab === 'dashboard' && renderDashboard()}
+              {activeTab === 'scenes' && <Scenes socket={socket} rooms={rooms} allDevices={devices} onAddRoom={handleAddRoom} />}
+              {activeTab === 'sensors' && renderSensorsSection()}
+              {activeTab === 'devices' && renderDevicesView()}
+              {activeTab === 'settings' && renderSettingsView()}
+            </>
           )}
         </div>
       </main>
+      <AddSensorModal 
+        isOpen={isSensorModalOpen} 
+        onClose={() => setIsSensorModalOpen(false)}
+        onAdd={handleAddSensor}
+        rooms={rooms}
+      />
       <ProvisioningModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onFinish={handleAddDevice} />
       <AddRoomModal isOpen={isRoomModalOpen} onClose={() => setIsRoomModalOpen(false)} onAdd={handleAddRoom} />
       <ConfigureDeviceModal isOpen={!!configuringDevice} device={configuringDevice} onClose={() => setConfiguringDevice(null)} onConfigure={handleConfigureDevice} />

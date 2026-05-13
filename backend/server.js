@@ -21,6 +21,8 @@ import devicesRoutes from './routes/devices.js';
 import Room from './models/Room.js';
 import roomsRoutes from './routes/rooms.js';
 import googleSmartHomeRoutes from './routes/googleSmartHome.js';
+import sensorsRoutes from './routes/sensors.js';
+import Sensor from './models/Sensor.js';
 
 
 
@@ -44,6 +46,7 @@ app.use('/api/automations', automationRoutes);
 app.use('/api/devices', devicesRoutes);
 app.use('/api/rooms', roomsRoutes);
 app.use('/google', googleSmartHomeRoutes);
+app.use('/api/sensors', sensorsRoutes);
 
 
 
@@ -76,7 +79,20 @@ const startServer = async () => {
   // 5. Start Scheduler
   startScheduler(io);
 
-  // 6. Start Listening
+  // 6. Subscribe to Custom Sensors
+  try {
+    const sensors = await Sensor.find();
+    const topics = sensors.map(s => s.topic);
+    if (topics.length > 0) {
+      mqttClient.subscribe(topics, () => {
+        console.log(`📡 Resubscribed to ${topics.length} custom sensor topics`);
+      });
+    }
+  } catch (err) {
+    console.error('Failed to resubscribe to custom sensors:', err);
+  }
+
+  // 7. Start Listening
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Smart Home Server running on port ${PORT}`);

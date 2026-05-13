@@ -226,6 +226,30 @@ app.onExecute(async (body, headers) => {
             topic = `smart-switch/command/${device.deviceId}`;
           }
 
+          // SPECIAL HANDLING FOR CURTAINS
+          if (device.type === 'curtain') {
+            const topic = `touch-panel/${device.deviceId}/switch/command`;
+            let curtainValue = '10'; // Default to stop/off
+
+            if (commandType === 'action.devices.commands.OpenClose') {
+              curtainValue = params.openPercent > 50 ? '11' : '21';
+            } else if (commandType === 'action.devices.commands.OnOff') {
+              // Map On to Open (11), Off to Stop (10) or Close (21)? 
+              // Usually Off = Stop (10) for curtains
+              curtainValue = params.on ? '11' : '10';
+            }
+
+            await publishToTopic(topic, {
+              type: 'switch',
+              value: curtainValue
+            });
+
+            await Device.updateOne({ deviceId: device.deviceId }, { $set: { on: curtainValue === '11' } });
+            successfulDevices.push(deviceReq.id);
+            continue; // Skip standard processing
+          }
+
+          // STANDARD DEVICE COMMANDS (Lights, Plugs, etc.)
           const updates = {};
           let mqttPayload = { entityId: device.deviceId };
 
@@ -249,15 +273,6 @@ app.onExecute(async (body, headers) => {
               g: (params.color.spectrumRGB >> 8) & 255,
               b: params.color.spectrumRGB & 255
             };
-          }
-          else if (commandType === 'action.devices.commands.OpenClose') {
-            const targetPercent = params.openPercent;
-            // Simplified: > 50 is open, < 50 is close
-            updates.on = targetPercent > 50;
-            mqttPayload.state = updates.on ? 'OPEN' : 'CLOSE';
-            // Actually, your curtain might use 11/10 and 21/20 numeric commands
-            // This is a basic mapping. You might need to refine this for your specific curtain MQTT format
-            mqttPayload.numericCommand = updates.on ? 11 : 21; 
           }
 
           // Publish to MQTT
