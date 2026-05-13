@@ -1,13 +1,14 @@
 import express from 'express';
 import Sensor from '../models/Sensor.js';
 import { getMqttClient } from '../services/mqttManager.js';
+import { clearSensorTopicCache, updateSensorTopicCache } from '../services/cacheService.js';
 
 const router = express.Router();
 
 // Get all sensors
 router.get('/', async (req, res) => {
   try {
-    const sensors = await Sensor.find();
+    const sensors = await Sensor.find().lean();
     res.json(sensors);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -21,6 +22,7 @@ router.post('/', async (req, res) => {
 
   try {
     const newSensor = await sensor.save();
+    updateSensorTopicCache(topic, newSensor);
     
     // Subscribe to the new MQTT topic
     const mqttClient = getMqttClient();
@@ -51,6 +53,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     await Sensor.findByIdAndDelete(req.params.id);
+    clearSensorTopicCache(sensor.topic);
     res.json({ message: 'Sensor deleted' });
   } catch (err) {
     res.status(500).json({ message: err.message });

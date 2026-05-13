@@ -30,6 +30,9 @@ const sensorSchema = new mongoose.Schema({
   timestamps: true,
 });
 
+sensorSchema.index({ room: 1 });
+sensorSchema.index({ lastUpdated: -1 });
+
 const Sensor = mongoose.model('Sensor', sensorSchema);
 
 export default Sensor;

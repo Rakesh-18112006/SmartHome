@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import io from 'socket.io-client';
 import { Power, Search, LayoutDashboard, Settings, Plus, Activity, Thermometer, Moon, Sun, Radio } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -21,6 +21,7 @@ const socket = io(API_BASE, {
 
 const App = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [initialLoading, setInitialLoading] = useState(true);
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [lightStatus, setLightStatus] = useState(false);
   const [brightness, setBrightness] = useState(100);
@@ -58,11 +59,11 @@ const App = () => {
     }
   }, [devices]);
 
-  const filteredDevices = devices.filter(d =>
+  const filteredDevices = useMemo(() => devices.filter(d =>
     d.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     d.deviceId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     d.room?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  ), [devices, searchQuery]);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -71,10 +72,27 @@ const App = () => {
 
   const isInteracting = useRef(false);
 
+  // Unified Initial Fetch
   useEffect(() => {
-    fetchDevices();
-    fetchRooms();
-    fetchSensors();
+    const initApp = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/init`);
+        const data = await res.json();
+        
+        setDevices(data.devices || []);
+        setRooms(data.rooms || []);
+        setSensors(data.sensors || []);
+        
+        if (data.devices?.length > 0 && !selectedDevice) {
+          setSelectedDevice(data.devices[0]);
+        }
+      } catch (err) {
+        console.error('Initial load failed', err);
+      } finally {
+        setInitialLoading(false);
+      }
+    };
+    initApp();
   }, []);
 
   const fetchDevices = async () => {
@@ -209,16 +227,19 @@ const App = () => {
   };
 
   useEffect(() => {
-    fetchDevices();
-    fetchRooms();
-    fetchSensors();
-
-    const refreshInterval = setInterval(fetchDevices, 5000);
+    const refreshInterval = setInterval(fetchDevices, 30000);
     
     socket.on('mqtt_status', (data) => setMqttStatus(data.status));
     
     socket.on('device_state_update', (updatedDevice) => {
-      setDevices(prev => (Array.isArray(prev) ? prev : []).map(d => d.deviceId === updatedDevice.deviceId ? { ...updatedDevice, isOnline: true } : d));
+      setDevices(prev => {
+        const list = Array.isArray(prev) ? prev : [];
+        const exists = list.some(d => d.deviceId === updatedDevice.deviceId);
+        const nextDevice = { ...updatedDevice, isOnline: true };
+        return exists
+          ? list.map(d => d.deviceId === updatedDevice.deviceId ? nextDevice : d)
+          : [...list, nextDevice];
+      });
     });
 
     socket.on('custom_sensor_update', (updatedSensor) => {
@@ -260,6 +281,7 @@ const App = () => {
 
   const toggleLight = (val) => {
     setLightStatus(val);
+    startInteraction();
     if (selectedDevice) {
       const isPlug = selectedDevice.type === 'plug' || selectedDevice.type === 'switch';
       const payload = isPlug
@@ -306,21 +328,33 @@ const App = () => {
 
   const lastEmitTime = useRef(0);
   const interactionTimeout = useRef(null);
+  const trailingTimeout = useRef(null);
 
-  const throttleEmit = (event, data) => {
-    // Set interacting flag to prevent inbound state from overriding UI
+  const startInteraction = () => {
     isInteracting.current = true;
-    
-    // Clear existing timeout and set a new one to reset interaction flag
     if (interactionTimeout.current) clearTimeout(interactionTimeout.current);
     interactionTimeout.current = setTimeout(() => {
       isInteracting.current = false;
-    }, 1500); // Wait 1.5s after last move before syncing back from server
+    }, 800); // Reduced to 800ms for snappier sync
+  };
+
+  const throttleEmit = (event, data) => {
+    startInteraction();
 
     const now = Date.now();
-    if (now - lastEmitTime.current > 100) {
+    const delay = 100;
+
+    if (now - lastEmitTime.current > delay) {
       socket.emit(event, data);
       lastEmitTime.current = now;
+      if (trailingTimeout.current) clearTimeout(trailingTimeout.current);
+    } else {
+      // Set a trailing timeout to catch the final position
+      if (trailingTimeout.current) clearTimeout(trailingTimeout.current);
+      trailingTimeout.current = setTimeout(() => {
+        socket.emit(event, data);
+        lastEmitTime.current = Date.now();
+      }, delay);
     }
   };
 
@@ -349,6 +383,7 @@ const App = () => {
   const toggleAutoMode = () => {
     const newMode = !autoMode;
     setAutoMode(newMode);
+    startInteraction();
     if (selectedDevice) {
       socket.emit('toggle_auto_mode', { deviceId: selectedDevice.deviceId, enabled: newMode });
     }
@@ -363,7 +398,10 @@ const App = () => {
   const renderDetailView = () => {
     if (!selectedDevice) return null;
 
-    const isLight = selectedDevice.type === 'light' || selectedDevice.type === 'rgbw';
+    const isLight = selectedDevice.type === 'light' || 
+                    selectedDevice.type === 'rgbw' || 
+                    selectedDevice.deviceId.toLowerCase().includes('light') || 
+                    selectedDevice.deviceId.toLowerCase().includes('rgbw');
     const isTouchPanel = selectedDevice.type === 'touch-panel' || selectedDevice.deviceId.startsWith('BSQ');
     const isPlug = selectedDevice.type === 'plug' || selectedDevice.type === 'switch' || selectedDevice.deviceId.startsWith('BSP');
     const isEnergyMonitor = selectedDevice.deviceId.startsWith('B1E') || selectedDevice.deviceId.startsWith('B3E') || selectedDevice.deviceId.startsWith('BSP');
@@ -497,7 +535,7 @@ const App = () => {
                       <p className="status-subtext">{lightStatus ? 'Device is active' : 'Device is standby'}</p>
                     </div>
                     <div className="header-actions">
-                      {selectedDevice.type === 'light' && (
+                      {isLight && (
                         <div className="auto-pill">
                           <Sun size={14} />
                           <span>{currentLux} lx</span>
@@ -519,23 +557,22 @@ const App = () => {
                     </div>
                   </div>
 
-                  <div className={`light-adjustments ${autoMode ? 'disabled' : ''}`}>
-                    <div className="adjustment-row">
-                      <div className="row-head">
-                        <label>Brightness</label>
-                        <span className="percent">{Math.round((brightness / 255) * 100)}%</span>
+                    <div className={`light-adjustments ${autoMode ? 'disabled' : ''}`}>
+                      <div className="adjustment-row">
+                        <div className="row-head">
+                          <label>Brightness</label>
+                          <span className="percent">{Math.round((brightness / 255) * 100)}%</span>
+                        </div>
+                        <div className="slider-wrapper">
+                          <input
+                            type="range" min="0" max="255" value={brightness}
+                            disabled={autoMode}
+                            onChange={(e) => handleBrightness(e.target.value)}
+                          />
+                        </div>
                       </div>
-                      <div className="slider-wrapper">
-                        <input
-                          type="range" min="0" max="255" value={brightness}
-                          disabled={autoMode}
-                          onChange={(e) => handleBrightness(e.target.value)}
-                        />
-                      </div>
-                    </div>
 
-                    {selectedDevice.type === 'rgbw' && (
-                      <>
+                      {isLight && (
                         <div className="adjustment-row">
                           <div className="row-head">
                             <label>White Light</label>
@@ -549,13 +586,15 @@ const App = () => {
                             />
                           </div>
                         </div>
+                      )}
+
+                      {selectedDevice.type === 'rgbw' && (
                         <div className="color-section">
                           <label>Color Palette</label>
                           <ColorControl onColorChange={handleColorChange} />
                         </div>
-                      </>
-                    )}
-                  </div>
+                      )}
+                    </div>
                 </div>
               )}
 
@@ -941,6 +980,19 @@ const App = () => {
 
   return (
     <div className="app-container">
+      {initialLoading && (
+        <div className="app-loader-overlay">
+          <div className="loader-content">
+            <div className="loader-logo">
+              <Radio size={50} strokeWidth={1.5} />
+            </div>
+            <div className="loader-text">Initializing System</div>
+            <div className="loader-bar">
+              <div className="loader-progress"></div>
+            </div>
+          </div>
+        </div>
+      )}
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       <main className="content">
         <header className="top-bar glass">

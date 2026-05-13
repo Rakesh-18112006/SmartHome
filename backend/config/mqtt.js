@@ -1,13 +1,11 @@
 import mqtt from 'mqtt';
 import { setMqttClient } from '../services/mqttManager.js';
-import { getState, updateState } from '../services/deviceState.js';
 import { updateSensorData, evaluateAutomations, getSensorData } from '../services/automationEngine.js';
 import Device from '../models/Device.js';
 import Sensor from '../models/Sensor.js';
+import { updateDeviceCache } from '../services/cacheService.js';
 
 const MQTT_BROKER = process.env.MQTT_BROKER || 'mqtt://35.154.62.193:1883';
-const MQTT_STATUS_TOPIC = 'smart_home/rgbw/+/status';
-const MQTT_LOG_TOPIC = 'smart_home/rgbw/+/debug';
 
 export const connectMQTT = (io) => {
   const mqttClient = mqtt.connect(MQTT_BROKER, {
@@ -21,7 +19,6 @@ export const connectMQTT = (io) => {
     setMqttClient(mqttClient);
     io.emit('mqtt_status', { status: 'Connected' });
 
-    // Subscribe to all smarthome device topics including specific PDF topics
     mqttClient.subscribe([
       'smarthome/+/+/status', 
       'smarthome/+/+/log', 
@@ -34,7 +31,8 @@ export const connectMQTT = (io) => {
       'touch-panel/+/switch/status',
       'touch-panel/+/ping/status',
       'smart_home/rgbw/+/status',
-      'smart_home/rgbw/+/debug'
+      'smart_home/rgbw/+/debug',
+      'smart_home/rgbw/+/sensor/+'
     ]);
   });
 
@@ -57,7 +55,6 @@ export const connectMQTT = (io) => {
     } else if ((topicParts[0] === 'three-phase' || topicParts[0] === 'smart-switch') && topicParts[2] === 'ping') {
       deviceId = topicParts[1];
     } else if (topic === 'smart-switch/data' || topicParts[0] === 'smart-switch') {
-      // For smart-switch, ID might be in the topic or payload
       deviceId = topicParts[1] !== 'data' ? topicParts[1] : (data.entityId || data.deviceId);
     } else if (topic === 'energy-meter/three-phase' || topic === 'energy-meter/single-phase') {
       deviceId = data.DeviceID;
@@ -74,7 +71,7 @@ export const connectMQTT = (io) => {
         if (data.lux !== undefined) updates.lastLux = data.lux;
         if (data.brightness !== undefined) updates.brightness = data.brightness;
         
-        // Electrical parameters from smart-switch/data
+        // Electrical parameters
         if (data.voltage !== undefined) updates.voltage = Number(data.voltage);
         if (data.current !== undefined) updates.current = Number(data.current);
         if (data.power !== undefined) updates.power = Number(data.power);
@@ -83,70 +80,7 @@ export const connectMQTT = (io) => {
         if (data.temperature !== undefined) updates.temperature = Number(data.temperature);
         if (data.external_temp !== undefined) updates.externalTemp = Number(data.external_temp);
 
-        // 3-Phase specific fields
-        if (data.Voltage_R !== undefined) updates.voltageR = Number(data.Voltage_R);
-        if (data.Voltage_Y !== undefined) updates.voltageY = Number(data.Voltage_Y);
-        if (data.Voltage_B !== undefined) updates.voltageB = Number(data.Voltage_B);
-        if (data.Current_R !== undefined) updates.currentR = Number(data.Current_R);
-        if (data.Current_Y !== undefined) updates.currentY = Number(data.Current_Y);
-        if (data.Current_B !== undefined) updates.currentB = Number(data.Current_B);
-        if (data.Power_R !== undefined) updates.powerR = Number(data.Power_R);
-        if (data.Power_Y !== undefined) updates.powerY = Number(data.Power_Y);
-        if (data.Power_B !== undefined) updates.powerB = Number(data.Power_B);
-        if (data.PF_R !== undefined) updates.pfR = Number(data.PF_R);
-        if (data.PF_Y !== undefined) updates.pfY = Number(data.PF_Y);
-        if (data.PF_B !== undefined) updates.pfB = Number(data.PF_B);
-        if (data.Energy !== undefined) updates.energy = Number(data.Energy);
-        if (data.Apparent_Energy !== undefined) updates.apparentEnergy = Number(data.Apparent_Energy);
-        if (data.Reactive_Energy !== undefined) updates.reactiveEnergy = Number(data.Reactive_Energy);
-
-        // Single-Phase specific fields (Bijli Auditor)
-        if (data.Voltage !== undefined) updates.voltage = Number(data.Voltage);
-        if (data.Current !== undefined) updates.current = Number(data.Current);
-        if (data.PF !== undefined) updates.pf = Number(data.PF);
-        if (data.Power !== undefined) updates.power = Number(data.Power);
-        if (data.Apparent !== undefined) updates.apparentPowerR = Number(data.Apparent); // reuse R-phase field for single phase total
-        if (data.Reactive !== undefined) updates.reactivePowerR = Number(data.Reactive);
-        if (data.PhaseAngle !== undefined) updates.phaseAngle = Number(data.PhaseAngle);
-
-        // Touch Panel Switch/Fan Status Parsing
-        if (topic.includes('/switch/status') || topic.includes('/ping/status')) {
-          if (data.switch || data.dimmer) {
-            const device = await Device.findOne({ deviceId });
-            if (!device || !device.subDevices) return;
-            
-            device.lastSeen = new Date();
-
-            // 1. Sync Switch & Fan "ON" states
-            if (data.switch && Array.isArray(data.switch)) {
-              data.switch.forEach((status, i) => {
-                const index = i + 1;
-                const sd = device.subDevices.find(s => s.index === index);
-                if (sd) sd.on = (status === 1);
-              });
-            }
-
-            // 2. Sync Fan Speeds
-            if (data.dimmer && Array.isArray(data.dimmer)) {
-              const fans = device.subDevices.filter(sd => sd.type === 'fan');
-              data.dimmer.forEach((speed, i) => {
-                if (fans[i]) {
-                  const sVal = Number(speed);
-                  if (sVal > 0) fans[i].speed = sVal;
-                }
-              });
-            }
-
-            // Save all changes at once
-            const updated = await device.save();
-            
-            // Emit the fully updated device to frontend
-            io.emit('device_state_update', updated);
-            return;
-          }
-        }
-
-        // Map relay status: PDF uses "relayStatus":"ON" or "switch":[1]
+        // Map relay/state
         if (data.relayStatus !== undefined) updates.on = data.relayStatus === 'ON';
         if (data.switch !== undefined && Array.isArray(data.switch)) updates.on = data.switch[0] === 1;
         if (data.state !== undefined) updates.on = data.state === 'ON';
@@ -157,14 +91,10 @@ export const connectMQTT = (io) => {
           updates.spectrumRgb = (r << 16) | (g << 8) | b;
         }
 
-        // Timer parsing from PDF format: {"timer":{"remaining":30,"action":10}}
-        if (data.timer) {
-          updates.timerRemaining = data.timer.remaining;
-          updates.timerAction = String(data.timer.action);
-        }
-        
-        const updatedDevice = await Device.findOneAndUpdate({ deviceId }, updates, { returnDocument: 'after' });
+        // Atomic update and broadcast
+        const updatedDevice = await Device.findOneAndUpdate({ deviceId }, updates, { returnDocument: 'after', lean: true });
         if (updatedDevice) {
+          updateDeviceCache(deviceId, updatedDevice);
           io.emit('device_state_update', updatedDevice);
         }
 
@@ -178,37 +108,34 @@ export const connectMQTT = (io) => {
         if (Object.keys(sensorUpdates).length > 0) {
           updateSensorData(sensorUpdates);
           io.emit('sensor_data_update', getSensorData());
-          await evaluateAutomations(io);
+          evaluateAutomations(io).catch(err => console.error('[AUTOMATION] Eval error:', err));
         }
-
-    } catch (e) {
-      console.error(`Error processing MQTT status for ${deviceId}`, e);
+      } catch (e) {
+        console.error(`Error processing MQTT status for ${deviceId}`, e);
+      }
     }
-  }
 
-  // Handle custom sensors - this should run even if it's not a standard device
-  try {
-    const customSensor = await Sensor.findOne({ topic });
-    if (customSensor) {
-      customSensor.value = data; // Store raw value (number, object, etc.)
-      customSensor.lastUpdated = new Date();
-      await customSensor.save();
-      
-      // Update automation engine with custom sensor data
-      // Use the sensor name as the key for conditions
+    // Handle custom sensors (ATOMIC UPDATE to avoid ParallelSaveError)
+    try {
       const sensorVal = (typeof data === 'object' && data.value !== undefined) ? data.value : data;
-      updateSensorData({ [customSensor.name]: sensorVal });
-      
-      io.emit('custom_sensor_update', customSensor);
-      io.emit('sensor_data_update', getSensorData());
-      await evaluateAutomations(io);
-    }
-  } catch (err) {
-    console.error(`Error processing custom sensor for ${topic}`, err);
-  }
+      const updatedSensor = await Sensor.findOneAndUpdate(
+        { topic },
+        { value: data, lastUpdated: new Date() },
+        { returnDocument: 'after', lean: true }
+      );
 
-  io.emit('mqtt_message', { topic, message: payload });
-});
+      if (updatedSensor) {
+        updateSensorData({ [updatedSensor.name]: sensorVal });
+        io.emit('custom_sensor_update', updatedSensor);
+        io.emit('sensor_data_update', getSensorData());
+        evaluateAutomations(io).catch(err => console.error('[AUTOMATION] Custom Eval error:', err));
+      }
+    } catch (err) {
+      console.error(`Error processing custom sensor for ${topic}`, err);
+    }
+
+    io.emit('mqtt_message', { topic, message: payload });
+  });
 
   mqttClient.on('error', (err) => {
     console.error('MQTT error:', err);

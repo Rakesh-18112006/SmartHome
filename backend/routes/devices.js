@@ -1,5 +1,6 @@
 import express from 'express';
 import Device from '../models/Device.js';
+import { updateDeviceCache, clearDeviceCache } from '../services/cacheService.js';
 
 const router = express.Router();
 
@@ -42,6 +43,7 @@ router.post('/', async (req, res) => {
 
   try {
     const newDevice = await device.save();
+    updateDeviceCache(deviceId, newDevice);
     res.status(201).json(newDevice);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -55,8 +57,11 @@ router.put('/:deviceId', async (req, res) => {
     const updatedDevice = await Device.findOneAndUpdate(
       { deviceId: req.params.deviceId },
       { title, type, icon, room, subDevices, isConfigured: true },
-      { new: true }
+      { returnDocument: 'after', lean: true }
     );
+    if (updatedDevice) {
+      updateDeviceCache(req.params.deviceId, updatedDevice);
+    }
     res.json(updatedDevice);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -67,6 +72,7 @@ router.put('/:deviceId', async (req, res) => {
 router.delete('/:deviceId', async (req, res) => {
   try {
     await Device.findOneAndDelete({ deviceId: req.params.deviceId });
+    clearDeviceCache(req.params.deviceId);
     res.json({ message: 'Device removed successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });

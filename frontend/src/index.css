@@ -93,6 +93,92 @@ button:active {
   min-height: 100vh;
 }
 
+/* Premium Loading Screen */
+.app-loader-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: var(--bg-main);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  background-image: 
+    radial-gradient(circle at 50% 50%, var(--primary-glow) 0%, transparent 60%);
+}
+
+.loader-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.loader-logo {
+  width: 100px;
+  height: 100px;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  border-radius: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 40px var(--primary-glow);
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+.loader-logo svg {
+  color: white;
+  width: 50px;
+  height: 50px;
+}
+
+.loader-text {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  animation: fade-pulse 1.5s infinite;
+}
+
+.loader-bar {
+  width: 200px;
+  height: 4px;
+  background: var(--border-strong);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.loader-progress {
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  border-radius: 2px;
+  position: absolute;
+  left: -100%;
+  animation: progress-slide 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 30px var(--primary-glow); }
+  50% { transform: scale(1.05); box-shadow: 0 0 60px var(--primary-glow); }
+}
+
+@keyframes fade-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes progress-slide {
+  0% { left: -100%; width: 30%; }
+  50% { width: 60%; }
+  100% { left: 100%; width: 30%; }
+}
+
 /* Sidebar Styles */
 .sidebar {
   width: 280px;
@@ -1788,4 +1874,9 @@ button:active {
 [data-theme="dark"] .input-field-wrapper input:focus, 
 [data-theme="dark"] .premium-select:focus {
   background: rgba(255, 255, 255, 0.05);
+}
+
+/* CCT Slider Gradient */
+.cct-slider input[type="range"] {
+  background: linear-gradient(to right, #ffcc33, #ffffff, #99ccff) !important;
 }

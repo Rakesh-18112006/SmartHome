@@ -7,6 +7,7 @@
 const MQTT_COMMAND_TOPIC = 'smart_home/rgbw/rgbw1/command';
 
 let _mqttClient = null;
+const MQTT_DEBUG = process.env.MQTT_DEBUG === 'true';
 
 /**
  * Set the MQTT client reference (called once from server.js after connection).
@@ -36,12 +37,14 @@ export function publishToTopic(topic, payload) {
     }
 
     const message = JSON.stringify(payload);
-    _mqttClient.publish(topic, message, (err) => {
+    _mqttClient.publish(topic, message, { qos: 0, retain: false }, (err) => {
       if (err) {
         console.error(`[MQTT BRIDGE] Publish error on ${topic}:`, err.message);
         return reject(err);
       }
-      console.log(`[MQTT BRIDGE] Published to ${topic}: ${message}`);
+      if (MQTT_DEBUG) {
+        console.log(`[MQTT BRIDGE] Published to ${topic}: ${message}`);
+      }
       return resolve(true);
     });
   });

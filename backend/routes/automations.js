@@ -43,7 +43,7 @@ router.put('/:id', async (req, res) => {
     const automation = await Automation.findByIdAndUpdate(
       req.params.id,
       req.body,
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
     if (!automation) {
       return res.status(404).json({ error: 'Automation not found' });

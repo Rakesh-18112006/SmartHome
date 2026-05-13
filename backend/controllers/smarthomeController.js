@@ -169,7 +169,7 @@ async function handleExecute(requestId, payload) {
         const updatedDevice = await Device.findOneAndUpdate(
           { deviceId: device.id },
           update,
-          { new: true, upsert: true }
+          { returnDocument: 'after', upsert: true }
         );
 
         console.log(`[EXECUTE] Updated device ${device.id}:`, update);

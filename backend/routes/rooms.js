@@ -1,6 +1,7 @@
 import express from 'express';
 import Room from '../models/Room.js';
 import Device from '../models/Device.js';
+import { clearAllDeviceCache } from '../services/cacheService.js';
 
 const router = express.Router();
 
@@ -8,7 +9,7 @@ const router = express.Router();
 // Get all rooms
 router.get('/', async (req, res) => {
   try {
-    const rooms = await Room.find();
+    const rooms = await Room.find().lean();
     res.json(rooms);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -35,6 +36,7 @@ router.delete('/:name', async (req, res) => {
     await Room.findOneAndDelete({ name: roomName });
     // Update devices that were in this room
     await Device.updateMany({ room: roomName }, { room: 'Unassigned' });
+    clearAllDeviceCache();
     res.json({ message: 'Room removed successfully' });
 
   } catch (err) {

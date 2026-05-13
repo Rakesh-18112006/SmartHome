@@ -47,8 +47,8 @@ const AddDeviceModal = ({ isOpen, onClose, onAdd }) => {
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Device Name</label>
-            <input 
-              type="text" 
+            <input
+              type="text"
               placeholder="e.g. Kitchen Light"
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
@@ -57,8 +57,8 @@ const AddDeviceModal = ({ isOpen, onClose, onAdd }) => {
           </div>
           <div className="form-group">
             <label>Device ID (Unique)</label>
-            <input 
-              type="text" 
+            <input
+              type="text"
               placeholder="e.g. light-kitchen"
               value={formData.deviceId}
               onChange={(e) => setFormData({ ...formData, deviceId: e.target.value })}
@@ -67,7 +67,7 @@ const AddDeviceModal = ({ isOpen, onClose, onAdd }) => {
           </div>
           <div className="form-group">
             <label>Room</label>
-            <select 
+            <select
               value={formData.room}
               onChange={(e) => setFormData({ ...formData, room: e.target.value })}
               className="room-select"

@@ -69,7 +69,6 @@ const deviceSchema = new mongoose.Schema({
   apparentEnergy: Number,
   reactiveEnergy: Number,
   phaseAngle: Number,
-  phaseAngle: Number,
   temperature: Number,
   externalTemp: Number,
   subDevices: [{
@@ -87,6 +86,10 @@ const deviceSchema = new mongoose.Schema({
     days: [String],
     enabled: { type: Boolean, default: true }
   }],
+  manualOverrideUntil: {
+    type: Date,
+    default: null
+  },
   lastSeen: {
     type: Date,
     default: Date.now
@@ -94,6 +97,10 @@ const deviceSchema = new mongoose.Schema({
 }, {
   timestamps: true,
 });
+
+deviceSchema.index({ room: 1, isConfigured: 1 });
+deviceSchema.index({ lastSeen: -1 });
+deviceSchema.index({ 'schedules.enabled': 1, 'schedules.days': 1 });
 
 const Device = mongoose.model('Device', deviceSchema);
 

@@ -102,6 +102,9 @@ const automationSchema = new mongoose.Schema({
   timestamps: true,
 });
 
+automationSchema.index({ enabled: 1 });
+automationSchema.index({ lastTriggered: -1 });
+
 const Automation = mongoose.model('Automation', automationSchema);
 
 export default Automation;

@@ -1,13 +1,11 @@
 import Automation from '../models/Automation.js';
 import Device from '../models/Device.js';
-import { publishToLight, publishToTopic } from './mqttManager.js';
-import { getState, updateState } from './deviceState.js';
+import { publishToTopic } from './mqttManager.js';
+import { getDevice, updateDeviceCache } from './cacheService.js';
 
 /**
  * Automation Engine
- * 
  * Evaluates all enabled automation rules against current sensor data.
- * When conditions are met, executes the configured actions.
  */
 
 // Current sensor readings (updated by MQTT messages)
@@ -18,24 +16,28 @@ let sensorData = {
   motion: false,
 };
 
-/**
- * Update sensor readings from MQTT or any other source.
- */
+// Cache for enabled automations to avoid DB hits on every sensor update
+let cachedAutomations = [];
+let lastCacheUpdate = 0;
+
 export function updateSensorData(updates) {
   sensorData = { ...sensorData, ...updates };
   return sensorData;
 }
 
-/**
- * Get current sensor readings.
- */
 export function getSensorData() {
   return { ...sensorData };
 }
 
-/**
- * Evaluate a single condition against current sensor data.
- */
+async function getEnabledAutomations() {
+  const now = Date.now();
+  if (now - lastCacheUpdate > 60000 || cachedAutomations.length === 0) { // Refresh every 1 min
+    cachedAutomations = await Automation.find({ enabled: true });
+    lastCacheUpdate = now;
+  }
+  return cachedAutomations;
+}
+
 function evaluateCondition(condition) {
   const currentValue = sensorData[condition.sensor];
   if (currentValue === undefined) return false;
@@ -59,21 +61,20 @@ function evaluateCondition(condition) {
 async function executeAction(action, io) {
   try {
     const { targetDeviceId, subDeviceIndex, command, params } = action;
-    console.log(`[AUTOMATION ENGINE] Executing action: ${command} on ${targetDeviceId} (Sub: ${subDeviceIndex})`);
+    console.log(`[AUTOMATION ENGINE] Executing action: ${command} on ${targetDeviceId}`);
 
+    const device = await getDevice(targetDeviceId);
+    if (!device) return;
 
-
-    // Generic device handling
-    const device = await Device.findOne({ deviceId: targetDeviceId });
-    if (!device) {
-      console.warn(`[AUTOMATION ENGINE] Device not found: ${targetDeviceId}`);
-      return;
+    // Manual Override check
+    if (device.manualOverrideUntil && device.manualOverrideUntil > new Date()) {
+      return; 
     }
 
     let topic = '';
     let payload = {};
 
-    // Determine default topic and payload for RGBW lights if they are of that type
+    // Standard RGBW/Light handling
     if (device.type === 'rgbw' || device.type === 'light') {
       topic = `smart_home/rgbw/${targetDeviceId}/command`;
       switch (command) {
@@ -85,125 +86,86 @@ async function executeAction(action, io) {
       }
       
       if (topic && Object.keys(payload).length > 0) {
-        // Execute in parallel
-        const [updatedDevice] = await Promise.all([
-          Device.findOneAndUpdate({ deviceId: targetDeviceId }, {
-            on: (command !== 'turn_off'),
-            ...(command === 'set_brightness' && { brightness: params.brightness }),
-            ...(command === 'set_color' && { spectrumRgb: (params.color[0] << 16) | (params.color[1] << 8) | params.color[2] })
-          }, { new: true }),
-          publishToTopic(topic, payload)
-        ]);
+        publishToTopic(topic, payload).catch(err => console.error(err));
 
-        if (io && updatedDevice) io.emit('device_state_update', updatedDevice);
+        const updatedDevice = await Device.findOneAndUpdate({ deviceId: targetDeviceId }, {
+          on: (command !== 'turn_off'),
+          ...(command === 'set_brightness' && { brightness: params.brightness }),
+          ...(command === 'set_color' && { spectrumRgb: (params.color[0] << 16) | (params.color[1] << 8) | params.color[2] })
+        }, { returnDocument: 'after' });
+
+        if (io && updatedDevice) {
+          updateDeviceCache(targetDeviceId, updatedDevice);
+          io.emit('device_state_update', updatedDevice);
+        }
         return;
       }
     }
 
+    // Touch Panel / Curtain logic
     if (targetDeviceId.startsWith('BSQ')) {
-      // Touch Panel Logic (Multi-channel)
       topic = `touch-panel/${targetDeviceId}/switch/command`;
       const idx = subDeviceIndex !== null ? subDeviceIndex : 0;
-      
       if (command === 'turn_on' || command === 'turn_off') {
         payload = { index: idx, status: command === 'turn_on' ? 1 : 0 };
-        // Update local DB state
-        if (device.subDevices && device.subDevices[idx]) {
-          device.subDevices[idx].on = (command === 'turn_on');
-        }
-      } else if (command === 'set_speed') {
-        // Find which subdevice is the fan
-        const fanIndex = device.subDevices.findIndex(sd => sd.type === 'fan');
-        if (fanIndex !== -1) {
-          topic = `touch-panel/${targetDeviceId}/dimmer/command`;
-          payload = { index: 0, status: params?.speed || 1 }; // Typically 1 dimmer per panel
-          device.subDevices[fanIndex].speed = params?.speed || 1;
-          device.subDevices[fanIndex].on = true;
-        }
       }
     } else if (targetDeviceId.startsWith('BS')) {
-      // Specialized Curtain/Touch-Panel Logic (e.g. BS900000001)
       topic = `touch-panel/${targetDeviceId}/switch/command`;
       if (command === 'turn_on' || command === 'turn_off') {
         const startValue = command === 'turn_on' ? '11' : '21';
         const stopValue = command === 'turn_on' ? '10' : '20';
-        
-        // 1. Send Start Command
-        payload = { type: 'switch', value: startValue };
-        await publishToTopic(topic, payload);
-        
-        // 2. Wait 5 seconds
-        console.log(`[AUTOMATION ENGINE] Curtain ${targetDeviceId} moving, waiting 5s to stop...`);
-        setTimeout(async () => {
-          try {
-            await publishToTopic(topic, { type: 'switch', value: stopValue });
-            console.log(`[AUTOMATION ENGINE] Curtain ${targetDeviceId} stopped.`);
-          } catch (err) {
-            console.error(`[AUTOMATION ENGINE] Error stopping curtain ${targetDeviceId}:`, err);
-          }
-        }, 5000);
-
-        device.on = (command === 'turn_on');
-        await device.save();
-        if (io) io.emit('device_state_update', device);
-        payload = {}; // Prevent duplicate publish at the end of the function
+        publishToTopic(topic, { type: 'switch', value: startValue });
+        setTimeout(() => publishToTopic(topic, { type: 'switch', value: stopValue }), 5000);
+        return;
       }
     } else if (targetDeviceId.startsWith('BSP') || device.type === 'plug' || device.type === 'switch') {
-      // Smart Plug / Single Channel Switch
       topic = `smart-switch/command/${targetDeviceId}`;
-      const status = (command === 'turn_on' ? 'ON' : 'OFF');
-      payload = { entityId: targetDeviceId, relayStatus: status };
-      device.on = (command === 'turn_on');
+      payload = { entityId: targetDeviceId, relayStatus: (command === 'turn_on' ? 'ON' : 'OFF') };
     }
 
     if (topic && Object.keys(payload).length > 0) {
-      await publishToTopic(topic, payload);
-      await device.save();
-      if (io) io.emit('device_state_update', device);
+      publishToTopic(topic, payload).catch(err => console.error(err));
+      const updatedDevice = await Device.findOneAndUpdate(
+        { deviceId: targetDeviceId }, 
+        { on: (command === 'turn_on') }, 
+        { returnDocument: 'after' }
+      );
+      if (io && updatedDevice) {
+        updateDeviceCache(targetDeviceId, updatedDevice);
+        io.emit('device_state_update', updatedDevice);
+      }
     }
-
   } catch (err) {
     console.error('[AUTOMATION ENGINE] Error executing action:', err);
   }
 }
 
 /**
- * Evaluate all enabled automation rules and execute matching ones.
- * Called whenever sensor data changes.
+ * Evaluate all enabled automation rules.
  */
 export async function evaluateAutomations(io) {
   try {
-    const rules = await Automation.find({ enabled: true });
+    const rules = await getEnabledAutomations();
 
-    for (const rule of rules) {
-      // Check cooldown
-      if (rule.lastTriggered) {
-        const elapsed = (Date.now() - rule.lastTriggered.getTime()) / 1000;
-        if (elapsed < rule.cooldownSeconds) {
-          continue; // Still in cooldown
-        }
+    const triggerPromises = rules.map(async (rule) => {
+      if (rule.lastTriggered && (Date.now() - rule.lastTriggered.getTime()) < rule.cooldownSeconds * 1000) {
+        return;
       }
 
-      // Evaluate conditions
       const results = rule.conditions.map(evaluateCondition);
-      const conditionsMet = rule.conditionLogic === 'all'
-        ? results.every(Boolean)
-        : results.some(Boolean);
+      const conditionsMet = rule.conditionLogic === 'all' ? results.every(Boolean) : results.some(Boolean);
 
       if (conditionsMet) {
-        console.log(`[AUTOMATION ENGINE] ✅ Rule "${rule.name}" triggered!`);
+        console.log(`[AUTOMATION ENGINE] Rule "${rule.name}" triggered!`);
+        await Promise.all(rule.actions.map(action => executeAction(action, io)));
 
-        // Execute all actions
-        for (const action of rule.actions) {
-          await executeAction(action, io);
-        }
-
-        // Update trigger metadata
         rule.lastTriggered = new Date();
         rule.triggerCount += 1;
-        await rule.save();
+        Automation.updateOne({ _id: rule._id }, { 
+          lastTriggered: rule.lastTriggered, 
+          triggerCount: rule.triggerCount 
+        }).catch(err => console.error(err));
 
-        // Notify frontend about the trigger
         if (io) {
           io.emit('automation_triggered', {
             ruleId: rule._id,
@@ -213,7 +175,9 @@ export async function evaluateAutomations(io) {
           });
         }
       }
-    }
+    });
+
+    await Promise.all(triggerPromises);
   } catch (err) {
     console.error('[AUTOMATION ENGINE] Error evaluating automations:', err);
   }
