@@ -61,37 +61,7 @@ async function executeAction(action, io) {
     const { targetDeviceId, subDeviceIndex, command, params } = action;
     console.log(`[AUTOMATION ENGINE] Executing action: ${command} on ${targetDeviceId} (Sub: ${subDeviceIndex})`);
 
-    // Special handling for the legacy RGBW light (if used)
-    if (targetDeviceId === 'light-1') {
-      const state = getState();
-      switch (command) {
-        case 'turn_on':
-          updateState({ state: 'ON' });
-          await publishToLight({ ...getState(), state: 'ON' });
-          break;
-        case 'turn_off':
-          updateState({ state: 'OFF' });
-          await publishToLight({ ...getState(), state: 'OFF' });
-          break;
-        case 'set_brightness':
-          const brightness = params?.brightness ?? 255;
-          updateState({ brightness, state: 'ON' });
-          await publishToLight({ ...getState(), brightness, state: 'ON' });
-          break;
-        case 'set_color':
-          const color = params?.color || [255, 255, 255, 255];
-          updateState({ color, state: 'ON', effect: 'solid' });
-          await publishToLight({ ...getState() });
-          break;
-        case 'set_effect':
-          const effect = params?.effect || 'solid';
-          updateState({ effect, state: 'ON' });
-          await publishToLight({ ...getState() });
-          break;
-      }
-      if (io) io.emit('device_state_update', getState());
-      return;
-    }
+
 
     // Generic device handling
     const device = await Device.findOne({ deviceId: targetDeviceId });
@@ -103,8 +73,35 @@ async function executeAction(action, io) {
     let topic = '';
     let payload = {};
 
+    // Determine default topic and payload for RGBW lights if they are of that type
+    if (device.type === 'rgbw' || device.type === 'light') {
+      topic = `smart_home/rgbw/${targetDeviceId}/command`;
+      switch (command) {
+        case 'turn_on':   payload = { state: 'ON' }; break;
+        case 'turn_off':  payload = { state: 'OFF' }; break;
+        case 'set_brightness': payload = { state: 'ON', brightness: params?.brightness ?? 255 }; break;
+        case 'set_color': payload = { state: 'ON', effect: 'solid', color: params?.color || [255, 255, 255, 255] }; break;
+        case 'set_effect': payload = { state: 'ON', effect: params?.effect || 'solid' }; break;
+      }
+      
+      if (topic && Object.keys(payload).length > 0) {
+        // Execute in parallel
+        const [updatedDevice] = await Promise.all([
+          Device.findOneAndUpdate({ deviceId: targetDeviceId }, {
+            on: (command !== 'turn_off'),
+            ...(command === 'set_brightness' && { brightness: params.brightness }),
+            ...(command === 'set_color' && { spectrumRgb: (params.color[0] << 16) | (params.color[1] << 8) | params.color[2] })
+          }, { new: true }),
+          publishToTopic(topic, payload)
+        ]);
+
+        if (io && updatedDevice) io.emit('device_state_update', updatedDevice);
+        return;
+      }
+    }
+
     if (targetDeviceId.startsWith('BSQ')) {
-      // Touch Panel Logic
+      // Touch Panel Logic (Multi-channel)
       topic = `touch-panel/${targetDeviceId}/switch/command`;
       const idx = subDeviceIndex !== null ? subDeviceIndex : 0;
       
@@ -123,6 +120,33 @@ async function executeAction(action, io) {
           device.subDevices[fanIndex].speed = params?.speed || 1;
           device.subDevices[fanIndex].on = true;
         }
+      }
+    } else if (targetDeviceId.startsWith('BS')) {
+      // Specialized Curtain/Touch-Panel Logic (e.g. BS900000001)
+      topic = `touch-panel/${targetDeviceId}/switch/command`;
+      if (command === 'turn_on' || command === 'turn_off') {
+        const startValue = command === 'turn_on' ? '11' : '21';
+        const stopValue = command === 'turn_on' ? '10' : '20';
+        
+        // 1. Send Start Command
+        payload = { type: 'switch', value: startValue };
+        await publishToTopic(topic, payload);
+        
+        // 2. Wait 5 seconds
+        console.log(`[AUTOMATION ENGINE] Curtain ${targetDeviceId} moving, waiting 5s to stop...`);
+        setTimeout(async () => {
+          try {
+            await publishToTopic(topic, { type: 'switch', value: stopValue });
+            console.log(`[AUTOMATION ENGINE] Curtain ${targetDeviceId} stopped.`);
+          } catch (err) {
+            console.error(`[AUTOMATION ENGINE] Error stopping curtain ${targetDeviceId}:`, err);
+          }
+        }, 5000);
+
+        device.on = (command === 'turn_on');
+        await device.save();
+        if (io) io.emit('device_state_update', device);
+        payload = {}; // Prevent duplicate publish at the end of the function
       }
     } else if (targetDeviceId.startsWith('BSP') || device.type === 'plug' || device.type === 'switch') {
       // Smart Plug / Single Channel Switch

@@ -4,7 +4,7 @@
  * commands to the physical MQTT light without circular imports.
  */
 
-const MQTT_COMMAND_TOPIC = 'rgbw-light/1234/light/command';
+const MQTT_COMMAND_TOPIC = 'smart_home/rgbw/rgbw1/command';
 
 let _mqttClient = null;
 

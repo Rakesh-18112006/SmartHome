@@ -4,7 +4,8 @@ import AddRoomModal from './AddRoomModal';
 
 const API_BASE = `http://${window.location.hostname}:3000`;
 const API_AUTOMATIONS = `${API_BASE}/api/automations`;
-const SENSORS = ['temperature', 'humidity', 'lux', 'motion'];
+const API_SENSORS = `${API_BASE}/api/sensors`;
+
 const OPS = { gt: '>', lt: '<', eq: '=', gte: '≥', lte: '≤', neq: '≠' };
 const ICONS = ['⚡', '🌡️', '💡', '❄️', '🔒', '🌙', '☀️', '🎬', '🔔', '🏠'];
 
@@ -17,18 +18,33 @@ const DEVICE_COMMANDS = {
   fan: ['turn_on', 'turn_off', 'set_speed'],
   switch: ['turn_on', 'turn_off'],
   plug: ['turn_on', 'turn_off'],
+  curtain: ['turn_on', 'turn_off'],
   'touch-panel': ['turn_on', 'turn_off', 'set_speed'],
   default: ['turn_on', 'turn_off']
+};
+
+const hexToRgb = (hex) => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? [
+    parseInt(result[1], 16),
+    parseInt(result[2], 16),
+    parseInt(result[3], 16),
+    255 // Default white channel
+  ] : [255, 255, 255, 255];
+};
+
+const rgbToHex = (rgb) => {
+  if (!Array.isArray(rgb) || rgb.length < 3) return '#ffffff';
+  return "#" + ((1 << 24) + (rgb[0] << 16) + (rgb[1] << 8) + rgb[2]).toString(16).slice(1);
 };
 
 const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
   const [rules, setRules] = useState([]);
   const [sensorData, setSensorData] = useState({ temperature: 25, humidity: 50, lux: 0, motion: false });
+  const [availableSensors, setAvailableSensors] = useState(['temperature', 'humidity', 'lux', 'motion']);
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState(null);
   const [toast, setToast] = useState(null);
-  const [showSim, setShowSim] = useState(false);
-  const [simValues, setSimValues] = useState({ temperature: 25, humidity: 50, lux: 100, motion: 0 });
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [currentRoom, setCurrentRoom] = useState(null);
 
@@ -44,13 +60,23 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
     try {
       const res = await fetch(API_AUTOMATIONS);
       const data = await res.json();
-      setRules(data);
+      setRules(Array.isArray(data) ? data : []);
     } catch (e) { console.error('Fetch error:', e); }
+  }, []);
+
+  const fetchCustomSensors = useCallback(async () => {
+    try {
+      const res = await fetch(API_SENSORS);
+      const data = await res.json();
+      const customNames = (Array.isArray(data) ? data : []).map(s => s.name);
+      setAvailableSensors(['temperature', 'humidity', 'lux', 'motion', ...customNames]);
+    } catch (e) { console.error('Fetch sensors error:', e); }
   }, []);
 
   useEffect(() => {
     fetchRules();
-  }, [fetchRules]);
+    fetchCustomSensors();
+  }, [fetchRules, fetchCustomSensors]);
 
   useEffect(() => {
     if (!socket) return;
@@ -137,17 +163,6 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
     }
   };
 
-  const simulate = () => {
-    if (!socket) return;
-    socket.emit('simulate_sensor', {
-      temperature: Number(simValues.temperature),
-      humidity: Number(simValues.humidity),
-      lux: Number(simValues.lux),
-      motion: Number(simValues.motion) > 0,
-    });
-    showToast('🧪 Sensor data simulated!');
-  };
-
   const updateCond = (i, field, val) => {
     const c = [...form.conditions];
     if (field === 'sensor' && val === 'motion') {
@@ -195,7 +210,14 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
     }
   };
 
-  const fmtCmd = (c) => c.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  const fmtCmd = (c, deviceId) => {
+    const dev = allDevices?.find(d => d.deviceId === deviceId);
+    if (dev?.type === 'curtain') {
+      if (c === 'turn_on') return 'Open';
+      if (c === 'turn_off') return 'Close';
+    }
+    return c.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
 
   return (
     <div className="scenes-view animate-slide-up">
@@ -215,38 +237,32 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
       </div>
 
       {currentRoom && (
-        <>
-          <div className="sensor-bar">
-            <div className="sensor-chip"><span className="icon">🌡️</span><div className="info"><span className="label">Temp</span><span className="val">{sensorData.temperature}°C</span></div></div>
-            <div className="sensor-chip"><span className="icon">💧</span><div className="info"><span className="label">Humidity</span><span className="val">{sensorData.humidity}%</span></div></div>
-            <div className="sensor-chip"><span className="icon">☀️</span><div className="info"><span className="label">Lux</span><span className="val">{sensorData.lux} lx</span></div></div>
-            <div className="sensor-chip"><span className="icon">🚶</span><div className="info"><span className="label">Motion</span><span className="val">{sensorData.motion ? 'Active' : 'None'}</span></div></div>
-          </div>
-          <div style={{ marginBottom: 24 }}>
-            <button className="create-btn" onClick={() => setShowSim(!showSim)}>🧪 {showSim ? 'Hide' : 'Show'} Simulator</button>
-          </div>
-        </>
-      )}
-
-      {showSim && (
-        <div className="sim-panel animate-fade-in">
-          <h3>🧪 Live Simulator</h3>
-          <div className="sim-controls">
-            {['temperature', 'humidity', 'lux', 'motion'].map(s => (
-              <div className="sim-field" key={s}>
-                <label>{s}</label>
-                <input type="number" value={simValues[s]} onChange={e => setSimValues({ ...simValues, [s]: e.target.value })} />
+        <div className="sensor-bar">
+          <div className="sensor-chip"><span className="icon">🌡️</span><div className="info"><span className="label">Temp</span><span className="val">{sensorData.temperature}°C</span></div></div>
+          <div className="sensor-chip"><span className="icon">💧</span><div className="info"><span className="label">Humidity</span><span className="val">{sensorData.humidity}%</span></div></div>
+          <div className="sensor-chip"><span className="icon">☀️</span><div className="info"><span className="label">Lux</span><span className="val">{sensorData.lux} lx</span></div></div>
+          <div className="sensor-chip"><span className="icon">🚶</span><div className="info"><span className="label">Motion</span><span className="val">{sensorData.motion ? 'Active' : 'None'}</span></div></div>
+          
+          {/* Custom Sensors in the bar */}
+          {Object.entries(sensorData).map(([key, val]) => {
+            if (['temperature', 'humidity', 'lux', 'motion'].includes(key)) return null;
+            return (
+              <div key={key} className="sensor-chip custom">
+                <span className="icon">📡</span>
+                <div className="info">
+                  <span className="label">{key}</span>
+                  <span className="val">{typeof val === 'object' ? '...' : val}</span>
+                </div>
               </div>
-            ))}
-          </div>
-          <button className="sim-btn" onClick={simulate}>Run Test</button>
+            );
+          })}
         </div>
       )}
 
       {!currentRoom ? (
         <div className="rooms-grid-scene">
-          {rooms.map(room => {
-            const roomRules = rules.filter(r => r.room === room.name);
+          {(Array.isArray(rooms) ? rooms : []).map(room => {
+            const roomRules = (Array.isArray(rules) ? rules : []).filter(r => r.room === room.name);
             const activeRules = roomRules.filter(r => r.enabled).length;
             return (
               <div key={room.name} className="room-card-scene glass card-hover" onClick={() => setCurrentRoom(room)}>
@@ -264,11 +280,11 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
           <div className="room-card-scene global glass card-hover" onClick={() => setCurrentRoom({ name: 'Global', icon: '🌍' })}>
             <div className="room-card-header-scene">
               <span className="room-icon-scene">🌍</span>
-              <div className="active-badge-scene">{rules.filter(r => (r.room === 'Global' || !r.room) && r.enabled).length} Active</div>
+              <div className="active-badge-scene">{(Array.isArray(rules) ? rules : []).filter(r => (r.room === 'Global' || !r.room) && r.enabled).length} Active</div>
             </div>
             <div className="room-card-body-scene">
               <h3>Global System</h3>
-              <p>{rules.filter(r => r.room === 'Global' || !r.room).length} Automations</p>
+              <p>{(Array.isArray(rules) ? rules : []).filter(r => r.room === 'Global' || !r.room).length} Automations</p>
             </div>
           </div>
         </div>
@@ -276,7 +292,7 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
         <div className="rules-grid-container animate-slide-up">
           <button className="create-btn" onClick={openCreate}>＋ New Rule</button>
           <div className="rules-grid">
-            {rules.filter(r => (r.room === 'Global' || (currentRoom && r.room === currentRoom.name))).map(rule => (
+            {(Array.isArray(rules) ? rules : []).filter(r => (r.room === 'Global' || (currentRoom && r.room === currentRoom.name))).map(rule => (
               <div className={`rule-card glass ${rule.enabled ? '' : 'disabled'}`} key={rule._id}>
                 <div className="card-top">
                   <div className="card-icon">{rule.icon || '⚡'}</div>
@@ -294,7 +310,7 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
                 </div>
                 <div className="conditions-list">
                   {rule.actions.map((a, i) => (
-                    <span className="action-pill" key={i}>→ {fmtCmd(a.command)} {a.targetDevice}</span>
+                    <span className="action-pill" key={i}>→ {fmtCmd(a.command, a.targetDeviceId)} {a.targetDevice}</span>
                   ))}
                 </div>
                 <div className="card-footer">
@@ -338,7 +354,7 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
                     <label>Room</label>
                     <select value={form.room} onChange={e => setForm({ ...form, room: e.target.value })}>
                       <option value="Global">Global</option>
-                      {rooms.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                      {(Array.isArray(rooms) ? rooms : []).map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
                     </select>
                   </div>
                 )}
@@ -361,7 +377,7 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
                     <div className="item-card" key={i}>
                       <div className="item-controls">
                         <select value={c.sensor} onChange={e => updateCond(i, 'sensor', e.target.value)}>
-                          {SENSORS.map(s => <option key={s} value={s}>{s}</option>)}
+                          {availableSensors.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
                         <select value={c.operator} onChange={e => updateCond(i, 'operator', e.target.value)}>
                           {Object.entries(OPS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -390,7 +406,7 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
                         <div className="action-main">
                           <select value={a.targetDeviceId} onChange={e => updateAction(i, 'targetDeviceId', e.target.value)}>
                             <option value="">Select Device</option>
-                            {allDevices.map(d => <option key={d.deviceId} value={d.deviceId}>{d.title}</option>)}
+                            {(Array.isArray(allDevices) ? allDevices : []).map(d => <option key={d.deviceId} value={d.deviceId}>{d.title}</option>)}
                           </select>
                           {type === 'touch-panel' && dev.subDevices && (
                             <select value={a.subDeviceIndex || 0} onChange={e => updateAction(i, 'subDeviceIndex', Number(e.target.value))}>
@@ -398,7 +414,7 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
                             </select>
                           )}
                           <select value={a.command} onChange={e => updateAction(i, 'command', e.target.value)}>
-                            {cmds.map(c => <option key={c} value={c}>{fmtCmd(c)}</option>)}
+                            {cmds.map(c => <option key={c} value={c}>{fmtCmd(c, a.targetDeviceId)}</option>)}
                           </select>
                         </div>
                         {a.command === 'set_speed' && (
@@ -407,10 +423,20 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
                              <input type="range" min="1" max="5" value={a.params?.speed || 1} onChange={e => updateAction(i, 'params', { ...a.params, speed: Number(e.target.value) })} />
                            </div>
                         )}
-                         {a.command === 'set_brightness' && (
+                        {a.command === 'set_brightness' && (
                            <div className="param-box">
                              <label>Brightness: {Math.round(((a.params?.brightness || 255) / 255) * 100)}%</label>
                              <input type="range" min="0" max="255" value={a.params?.brightness || 255} onChange={e => updateAction(i, 'params', { ...a.params, brightness: Number(e.target.value) })} />
+                           </div>
+                        )}
+                        {a.command === 'set_color' && (
+                           <div className="param-box">
+                             <label>Color</label>
+                             <input 
+                               type="color" 
+                               value={rgbToHex(a.params?.color || [255, 255, 255, 255])} 
+                               onChange={e => updateAction(i, 'params', { ...a.params, color: hexToRgb(e.target.value) })} 
+                             />
                            </div>
                         )}
                         <button className="remove-btn" onClick={() => removeAction(i)}>✕</button>
@@ -439,6 +465,7 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
         </div>
       )}
       <AddRoomModal isOpen={isRoomModalOpen} onClose={() => setIsRoomModalOpen(false)} onAdd={handleAddRoomLocal} />
+      {toast && <div className="toast-scene"><span>💡</span> {toast}</div>}
     </div>
   );
 };

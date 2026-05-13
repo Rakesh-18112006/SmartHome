@@ -11,7 +11,6 @@ const conditionSchema = new mongoose.Schema({
   sensor: {
     type: String,
     required: true,
-    enum: ['temperature', 'humidity', 'lux', 'motion', 'time'],
   },
   operator: {
     type: String,

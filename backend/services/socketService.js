@@ -22,7 +22,9 @@ export const initSocket = (io, mqttClient) => {
 
       let topic = device.topic || `smarthome/${device.type}/${device.deviceId}`;
       
-      if (id.startsWith('B3E') || id.startsWith('B1E')) {
+      if (device.type === 'rgbw' || device.type === 'light') {
+        topic = `smart_home/rgbw/${id}/command`;
+      } else if (id.startsWith('B3E') || id.startsWith('B1E')) {
         topic = `energy-meter/three-phase/command/${id}`;
       } else if (id.startsWith('BSP') || device.type === 'plug' || device.type === 'switch') {
         topic = `smart-switch/command/${id}`;
@@ -155,12 +157,25 @@ export const initSocket = (io, mqttClient) => {
 
     // Modified helper to accept optional topic override
     const updateDeviceAndPublish = async (deviceId, updates, mqttPayload, topicOverride) => {
-      const device = await Device.findOneAndUpdate({ deviceId }, updates, { returnDocument: 'after' });
-      if (device) {
-        const topic = topicOverride || device.topic || `smarthome/${device.type}/${device.deviceId}`;
-        await publishToTopic(topic, mqttPayload);
-        io.emit('device_state_update', device);
-        return device;
+      // Find the device first to get the correct topic if not provided
+      const device = await Device.findOne({ deviceId });
+      if (!device) return null;
+
+      const topic = topicOverride || device.topic || `smarthome/${device.type}/${device.deviceId}`;
+      let finalTopic = topic;
+      if (!topicOverride && !device.topic && (device.type === 'rgbw' || device.type === 'light')) {
+        finalTopic = `smart_home/rgbw/${device.deviceId}/command`;
+      }
+
+      // Execute publish and DB update in parallel for maximum speed
+      const [updatedDevice] = await Promise.all([
+        Device.findOneAndUpdate({ deviceId }, updates, { new: true }),
+        publishToTopic(finalTopic, mqttPayload)
+      ]);
+
+      if (updatedDevice) {
+        io.emit('device_state_update', updatedDevice);
+        return updatedDevice;
       }
       return null;
     };
@@ -195,6 +210,24 @@ export const initSocket = (io, mqttClient) => {
       mqttPayload.brightness = brightness; 
 
       await updateDeviceAndPublish(deviceId, { brightness, on: true }, mqttPayload);
+    });
+
+    socket.on('white_change', async (data) => {
+      const { deviceId, white } = data;
+      const device = await Device.findOne({ deviceId });
+      if (!device) return;
+
+      const r = (device.spectrumRgb >> 16) & 0xFF;
+      const g = (device.spectrumRgb >> 8) & 0xFF;
+      const b = device.spectrumRgb & 0xFF;
+
+      const mqttPayload = {
+        state: 'ON',
+        effect: 'solid',
+        color: [r, g, b, white]
+      };
+
+      await updateDeviceAndPublish(deviceId, { on: true }, mqttPayload);
     });
 
     socket.on('toggle_auto_mode', async (data) => {

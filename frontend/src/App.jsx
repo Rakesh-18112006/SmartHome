@@ -304,19 +304,37 @@ const App = () => {
     }
   };
 
+  const lastEmitTime = useRef(0);
+  const interactionTimeout = useRef(null);
+
+  const throttleEmit = (event, data) => {
+    // Set interacting flag to prevent inbound state from overriding UI
+    isInteracting.current = true;
+    
+    // Clear existing timeout and set a new one to reset interaction flag
+    if (interactionTimeout.current) clearTimeout(interactionTimeout.current);
+    interactionTimeout.current = setTimeout(() => {
+      isInteracting.current = false;
+    }, 1500); // Wait 1.5s after last move before syncing back from server
+
+    const now = Date.now();
+    if (now - lastEmitTime.current > 100) {
+      socket.emit(event, data);
+      lastEmitTime.current = now;
+    }
+  };
+
   const handleBrightness = (val) => {
-    if (autoMode) return;
     const value = parseInt(val);
     setBrightness(value);
-    setWhiteIntensity(value);
     if (selectedDevice) {
-      socket.emit('brightness_change', { deviceId: selectedDevice.deviceId, brightness: value, w: value });
+      throttleEmit('brightness_change', { deviceId: selectedDevice.deviceId, brightness: value });
     }
   };
 
   const handleColorChange = (color) => {
     if (selectedDevice) {
-      socket.emit('color_change', { deviceId: selectedDevice.deviceId, ...color, w: whiteIntensity });
+      throttleEmit('color_change', { deviceId: selectedDevice.deviceId, ...color, w: whiteIntensity });
     }
   };
 
@@ -324,7 +342,7 @@ const App = () => {
     const value = parseInt(val);
     setWhiteIntensity(value);
     if (selectedDevice) {
-      socket.emit('white_change', { deviceId: selectedDevice.deviceId, white: value });
+      throttleEmit('white_change', { deviceId: selectedDevice.deviceId, white: value });
     }
   };
 
@@ -517,10 +535,25 @@ const App = () => {
                     </div>
 
                     {selectedDevice.type === 'rgbw' && (
-                      <div className="color-section">
-                        <label>Color Palette</label>
-                        <ColorControl onColorChange={handleColorChange} />
-                      </div>
+                      <>
+                        <div className="adjustment-row">
+                          <div className="row-head">
+                            <label>White Light</label>
+                            <span className="percent">{Math.round((whiteIntensity / 255) * 100)}%</span>
+                          </div>
+                          <div className="slider-wrapper">
+                            <input
+                              type="range" min="0" max="255" value={whiteIntensity}
+                              disabled={autoMode}
+                              onChange={(e) => handleWhiteIntensity(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <div className="color-section">
+                          <label>Color Palette</label>
+                          <ColorControl onColorChange={handleColorChange} />
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>

@@ -6,8 +6,8 @@ import Device from '../models/Device.js';
 import Sensor from '../models/Sensor.js';
 
 const MQTT_BROKER = process.env.MQTT_BROKER || 'mqtt://35.154.62.193:1883';
-const MQTT_STATUS_TOPIC = 'rgbw-light/1234/light/status';
-const MQTT_LOG_TOPIC = 'rgbw-light/1234/debug/log';
+const MQTT_STATUS_TOPIC = 'smart_home/rgbw/+/status';
+const MQTT_LOG_TOPIC = 'smart_home/rgbw/+/debug';
 
 export const connectMQTT = (io) => {
   const mqttClient = mqtt.connect(MQTT_BROKER, {
@@ -33,7 +33,8 @@ export const connectMQTT = (io) => {
       'energy-meter/single-phase',
       'touch-panel/+/switch/status',
       'touch-panel/+/ping/status',
-      MQTT_STATUS_TOPIC
+      'smart_home/rgbw/+/status',
+      'smart_home/rgbw/+/debug'
     ]);
   });
 
@@ -62,6 +63,8 @@ export const connectMQTT = (io) => {
       deviceId = data.DeviceID;
     } else if (topicParts[0] === 'touch-panel') {
       deviceId = topicParts[1];
+    } else if (topicParts[0] === 'smart_home' && topicParts[1] === 'rgbw') {
+      deviceId = topicParts[2];
     }
 
     if (deviceId && data) {
@@ -190,7 +193,15 @@ export const connectMQTT = (io) => {
       customSensor.value = data; // Store raw value (number, object, etc.)
       customSensor.lastUpdated = new Date();
       await customSensor.save();
+      
+      // Update automation engine with custom sensor data
+      // Use the sensor name as the key for conditions
+      const sensorVal = (typeof data === 'object' && data.value !== undefined) ? data.value : data;
+      updateSensorData({ [customSensor.name]: sensorVal });
+      
       io.emit('custom_sensor_update', customSensor);
+      io.emit('sensor_data_update', getSensorData());
+      await evaluateAutomations(io);
     }
   } catch (err) {
     console.error(`Error processing custom sensor for ${topic}`, err);
