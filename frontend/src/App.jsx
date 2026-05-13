@@ -54,8 +54,8 @@ const App = () => {
     }
   }, [devices]);
 
-  const filteredDevices = devices.filter(d => 
-    d.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  const filteredDevices = devices.filter(d =>
+    d.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     d.deviceId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     d.room?.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -435,7 +435,7 @@ const App = () => {
                         <div className="auto-pill">
                           <Sun size={14} />
                           <span>{currentLux} lx</span>
-                          <button 
+                          <button
                             className={`mini-toggle ${autoMode ? 'active' : ''}`}
                             onClick={toggleAutoMode}
                           >
@@ -443,7 +443,7 @@ const App = () => {
                           </button>
                         </div>
                       )}
-                      <button 
+                      <button
                         className={`power-pill-btn ${lightStatus ? 'active' : ''}`}
                         onClick={() => toggleLight(!lightStatus)}
                       >
@@ -503,7 +503,7 @@ const App = () => {
                   <div className="curtain-actions press-hold-mode">
                     <div className="curtain-action-pair">
                       <label>Manual Operation</label>
-                      <button 
+                      <button
                         className={`curtain-btn ${curtainMoving === 'opening' ? 'active' : ''}`}
                         onMouseDown={() => { handleCurtainAction(11); setCurtainMoving('opening'); }}
                         onMouseUp={() => { handleCurtainAction(10); setCurtainMoving(null); }}
@@ -514,7 +514,7 @@ const App = () => {
                       </button>
                     </div>
                     <div className="curtain-action-pair">
-                      <button 
+                      <button
                         className={`curtain-btn ${curtainMoving === 'closing' ? 'active' : ''}`}
                         onMouseDown={() => { handleCurtainAction(21); setCurtainMoving('closing'); }}
                         onMouseUp={() => { handleCurtainAction(20); setCurtainMoving(null); }}
@@ -818,7 +818,7 @@ const App = () => {
             </div>
           </div>
           <div className="setting-item">
-             <p className="about-text">A professional-grade smart home management system designed for speed, security, and elegance.</p>
+            <p className="about-text">A professional-grade smart home management system designed for speed, security, and elegance.</p>
           </div>
         </div>
       </div>
@@ -832,9 +832,9 @@ const App = () => {
         <header className="top-bar glass">
           <div className="search-bar">
             <Search size={18} color="var(--text-muted)" />
-            <input 
-              type="text" 
-              placeholder="Search devices, rooms..." 
+            <input
+              type="text"
+              placeholder="Search devices, rooms..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />

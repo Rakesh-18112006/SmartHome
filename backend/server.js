@@ -20,6 +20,7 @@ import Device from './models/Device.js';
 import devicesRoutes from './routes/devices.js';
 import Room from './models/Room.js';
 import roomsRoutes from './routes/rooms.js';
+import googleSmartHomeRoutes from './routes/googleSmartHome.js';
 
 
 
@@ -42,6 +43,7 @@ app.use('/', smarthomeRoutes);
 app.use('/api/automations', automationRoutes);
 app.use('/api/devices', devicesRoutes);
 app.use('/api/rooms', roomsRoutes);
+app.use('/google', googleSmartHomeRoutes);
 
 
 
