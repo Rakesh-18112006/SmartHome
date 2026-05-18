@@ -1,4 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  Plus, ChevronLeft, Home, Globe, Trash2, Edit3, 
+  Thermometer, Droplets, Sun, Footprints, Radio, 
+  Settings, Power, Play, X, CheckCircle2, AlertCircle
+} from 'lucide-react';
 import './Scenes.css';
 import AddRoomModal from './AddRoomModal';
 
@@ -7,7 +12,13 @@ const API_AUTOMATIONS = `${API_BASE}/api/automations`;
 const API_SENSORS = `${API_BASE}/api/sensors`;
 
 const OPS = { gt: '>', lt: '<', eq: '=', gte: '≥', lte: '≤', neq: '≠' };
-const ICONS = ['⚡', '🌡️', '💡', '❄️', '🔒', '🌙', '☀️', '🎬', '🔔', '🏠'];
+const ICONS = [
+  { id: 'zap', icon: <Power size={20} />, label: '⚡' },
+  { id: 'temp', icon: <Thermometer size={20} />, label: '🌡️' },
+  { id: 'light', icon: <Sun size={20} />, label: '💡' },
+  { id: 'home', icon: <Home size={20} />, label: '🏠' },
+  { id: 'notif', icon: <AlertCircle size={20} />, label: '🔔' }
+];
 
 const EMPTY_COND = { sensor: 'temperature', operator: 'gt', value: 30 };
 const EMPTY_ACTION = { targetDeviceId: '', targetDevice: '', command: 'turn_on', subDeviceIndex: null, params: {} };
@@ -29,7 +40,7 @@ const hexToRgb = (hex) => {
     parseInt(result[1], 16),
     parseInt(result[2], 16),
     parseInt(result[3], 16),
-    255 // Default white channel
+    255 
   ] : [255, 255, 255, 255];
 };
 
@@ -82,7 +93,7 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
     if (!socket) return;
     const handler = (data) => setSensorData(data);
     const triggerHandler = (data) => {
-      showToast(`⚡ "${data.ruleName}" triggered!`);
+      showToast(data.ruleName);
       fetchRules();
     };
     socket.on('sensor_data_update', handler);
@@ -125,7 +136,7 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
   };
 
   const saveRule = async () => {
-    if (!form.name.trim()) return showToast('⚠️ Please enter a rule name');
+    if (!form.name.trim()) return showToast('⚠️ Rule name is required');
     try {
       const method = editId ? 'PUT' : 'POST';
       const url = editId ? `${API_AUTOMATIONS}/${editId}` : API_AUTOMATIONS;
@@ -137,11 +148,9 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
       if (res.ok) {
         setShowModal(false);
         fetchRules();
-        showToast(editId ? '✅ Rule updated!' : '✅ Rule created!');
-      } else {
-        showToast('❌ Save failed');
+        showToast(editId ? 'Updated' : 'Created');
       }
-    } catch (e) { showToast('❌ Save failed'); }
+    } catch (e) { showToast('Error saving'); }
   };
 
   const toggleRule = async (id) => {
@@ -150,24 +159,22 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
   };
 
   const deleteRule = async (id) => {
-    if (!window.confirm('Delete this automation?')) return;
+    if (!window.confirm('Delete automation?')) return;
     await fetch(`${API_AUTOMATIONS}/${id}`, { method: 'DELETE' });
     fetchRules();
-    showToast('🗑️ Rule deleted');
+    showToast('Deleted');
   };
 
   const handleAddRoomLocal = async (roomData) => {
     if (onAddRoom) {
       await onAddRoom(roomData);
-      showToast('🏠 Room created successfully!');
+      showToast('Room added');
     }
   };
 
   const updateCond = (i, field, val) => {
     const c = [...form.conditions];
-    if (field === 'sensor' && val === 'motion') {
-      c[i].value = "1";
-    }
+    if (field === 'sensor' && val === 'motion') c[i].value = "1";
     c[i] = { ...c[i], [field]: val };
     setForm({ ...form, conditions: c });
   };
@@ -185,14 +192,7 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
     const a = [...form.actions];
     if (field === 'targetDeviceId') {
       const dev = allDevices.find(d => d.deviceId === val);
-      a[i] = {
-        ...a[i],
-        targetDeviceId: val,
-        targetDevice: dev ? dev.title : '',
-        subDeviceIndex: null,
-        command: 'turn_on',
-        params: {}
-      };
+      a[i] = { ...a[i], targetDeviceId: val, targetDevice: dev ? dev.title : '', subDeviceIndex: null, command: 'turn_on', params: {} };
     } else if (field === 'command') {
       a[i] = { ...a[i], command: val, params: {} };
     } else {
@@ -223,39 +223,41 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
     <div className="scenes-view animate-slide-up">
       <div className="scenes-header">
         <div>
-          <h1>{currentRoom ? `${currentRoom.name} Automations` : 'Automations'}</h1>
-          <p>{currentRoom ? `Managing rules for ${currentRoom.name}` : 'Select a room to manage its automation rules'}</p>
+          <h1>{currentRoom ? currentRoom.name : 'Automations'}</h1>
+          <p>{currentRoom ? `Rules for ${currentRoom.name}` : 'Select a room to manage rules'}</p>
         </div>
         <div className="header-actions">
           {currentRoom && (
-            <button className="back-link-scene" onClick={() => setCurrentRoom(null)}>← All Rooms</button>
+            <button className="action-btn-pill secondary" onClick={() => setCurrentRoom(null)}>
+              <ChevronLeft size={16} /> All Rooms
+            </button>
           )}
           {!currentRoom && (
-            <button className="add-room-btn-scene" onClick={() => setIsRoomModalOpen(true)}>＋ 🏠 Add Room</button>
+            <button className="action-btn-pill primary" onClick={() => setIsRoomModalOpen(true)}>
+              <Plus size={16} /> Add Room
+            </button>
           )}
         </div>
       </div>
 
       {currentRoom && (
         <div className="sensor-bar">
-          <div className="sensor-chip"><span className="icon">🌡️</span><div className="info"><span className="label">Temp</span><span className="val">{sensorData.temperature}°C</span></div></div>
-          <div className="sensor-chip"><span className="icon">💧</span><div className="info"><span className="label">Humidity</span><span className="val">{sensorData.humidity}%</span></div></div>
-          <div className="sensor-chip"><span className="icon">☀️</span><div className="info"><span className="label">Lux</span><span className="val">{sensorData.lux} lx</span></div></div>
-          <div className="sensor-chip"><span className="icon">🚶</span><div className="info"><span className="label">Motion</span><span className="val">{sensorData.motion ? 'Active' : 'None'}</span></div></div>
-          
-          {/* Custom Sensors in the bar */}
-          {Object.entries(sensorData).map(([key, val]) => {
-            if (['temperature', 'humidity', 'lux', 'motion'].includes(key)) return null;
-            return (
-              <div key={key} className="sensor-chip custom">
-                <span className="icon">📡</span>
-                <div className="info">
-                  <span className="label">{key}</span>
-                  <span className="val">{typeof val === 'object' ? '...' : val}</span>
-                </div>
-              </div>
-            );
-          })}
+          <div className="sensor-chip">
+            <span className="icon"><Thermometer size={20} /></span>
+            <div className="info"><span className="label">Temp</span><span className="val">{sensorData.temperature}°C</span></div>
+          </div>
+          <div className="sensor-chip">
+            <span className="icon"><Droplets size={20} /></span>
+            <div className="info"><span className="label">Humidity</span><span className="val">{sensorData.humidity}%</span></div>
+          </div>
+          <div className="sensor-chip">
+            <span className="icon"><Sun size={20} /></span>
+            <div className="info"><span className="label">Lux</span><span className="val">{sensorData.lux} lx</span></div>
+          </div>
+          <div className="sensor-chip">
+            <span className="icon"><Footprints size={20} /></span>
+            <div className="info"><span className="label">Motion</span><span className="val">{sensorData.motion ? 'Active' : 'None'}</span></div>
+          </div>
         </div>
       )}
 
@@ -265,58 +267,56 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
             const roomRules = (Array.isArray(rules) ? rules : []).filter(r => r.room === room.name);
             const activeRules = roomRules.filter(r => r.enabled).length;
             return (
-              <div key={room.name} className="room-card-scene glass card-hover" onClick={() => setCurrentRoom(room)}>
+              <div key={room.name} className="room-card-scene glass" onClick={() => setCurrentRoom(room)}>
                 <div className="room-card-header-scene">
-                  <span className="room-icon-scene">{room.icon}</span>
+                  <span className="room-icon-scene"><Home size={24} /></span>
                   <div className={`active-badge-scene ${activeRules > 0 ? 'active' : ''}`}>{activeRules} Active</div>
                 </div>
                 <div className="room-card-body-scene">
                   <h3>{room.name}</h3>
-                  <p>{roomRules.length} Automations</p>
+                  <p>{roomRules.length} Rules</p>
                 </div>
               </div>
             );
           })}
-          <div className="room-card-scene global glass card-hover" onClick={() => setCurrentRoom({ name: 'Global', icon: '🌍' })}>
+          <div className="room-card-scene global glass" onClick={() => setCurrentRoom({ name: 'Global', icon: '🌍' })}>
             <div className="room-card-header-scene">
-              <span className="room-icon-scene">🌍</span>
+              <span className="room-icon-scene"><Globe size={24} /></span>
               <div className="active-badge-scene">{(Array.isArray(rules) ? rules : []).filter(r => (r.room === 'Global' || !r.room) && r.enabled).length} Active</div>
             </div>
             <div className="room-card-body-scene">
               <h3>Global System</h3>
-              <p>{(Array.isArray(rules) ? rules : []).filter(r => r.room === 'Global' || !r.room).length} Automations</p>
+              <p>{(Array.isArray(rules) ? rules : []).filter(r => r.room === 'Global' || !r.room).length} Rules</p>
             </div>
           </div>
         </div>
       ) : (
-        <div className="rules-grid-container animate-slide-up">
-          <button className="create-btn" onClick={openCreate}>＋ New Rule</button>
+        <div className="rules-grid-container">
+          <div className="welcome-header">
+            <button className="action-btn-pill primary" onClick={openCreate}><Plus size={16} /> New Rule</button>
+          </div>
           <div className="rules-grid">
             {(Array.isArray(rules) ? rules : []).filter(r => (r.room === 'Global' || (currentRoom && r.room === currentRoom.name))).map(rule => (
               <div className={`rule-card glass ${rule.enabled ? '' : 'disabled'}`} key={rule._id}>
                 <div className="card-top">
-                  <div className="card-icon">{rule.icon || '⚡'}</div>
+                  <div className="card-icon"><Radio size={24} /></div>
                   <div className="card-actions">
-                    <button className="action-btn" onClick={() => openEdit(rule)}>✏️</button>
-                    <button className="action-btn delete" onClick={() => deleteRule(rule._id)}>🗑️</button>
+                    <button className="action-btn-scene" onClick={() => openEdit(rule)}><Edit3 size={14} /></button>
+                    <button className="action-btn-scene delete" onClick={() => deleteRule(rule._id)}><Trash2 size={14} /></button>
                   </div>
                 </div>
                 <h3>{rule.name}</h3>
-                <p className="desc">{rule.description}</p>
+                <p className="desc">{rule.description || 'No description provided'}</p>
                 <div className="conditions-list">
                   {rule.conditions.map((c, i) => (
                     <span className="cond-pill" key={i}>IF {c.sensor} {OPS[c.operator]} {String(c.value)}</span>
                   ))}
-                </div>
-                <div className="conditions-list">
                   {rule.actions.map((a, i) => (
-                    <span className="action-pill" key={i}>→ {fmtCmd(a.command, a.targetDeviceId)} {a.targetDevice}</span>
+                    <span className="action-pill" key={i}>THEN {fmtCmd(a.command, a.targetDeviceId)} {a.targetDevice}</span>
                   ))}
                 </div>
-                <div className="card-footer">
-                   <span className="trigger-info">
-                    {rule.triggerCount > 0 ? `${rule.triggerCount} Triggers` : 'Never Run'}
-                  </span>
+                <div className="card-footer-scene">
+                  <span className="trigger-info">{rule.triggerCount || 0} Runs</span>
                   <button className={`toggle-switch ${rule.enabled ? 'on' : ''}`} onClick={() => toggleRule(rule._id)}>
                     <span className="knob"></span>
                   </button>
@@ -329,48 +329,30 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
 
       {showModal && (
         <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal glass animate-slide-up" onClick={e => e.stopPropagation()}>
+          <div className="modal glass scene-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{editId ? 'Edit Automation' : 'New Rule'}</h2>
-              <button className="modal-close" onClick={() => setShowModal(false)}>✕</button>
+              <h2>{editId ? 'Edit Rule' : 'New Rule'}</h2>
+              <button className="modal-close" onClick={() => setShowModal(false)}><X size={18} /></button>
             </div>
             <div className="modal-body">
               <div className="setup-section">
-                <h3>1. Information</h3>
+                <h3>1. Details</h3>
                 <div className="form-row">
                   <div className="form-group">
                     <label>Name</label>
-                    <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Rule Name" />
+                    <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Enter name..." />
                   </div>
                   <div className="form-group">
-                    <label>Icon</label>
-                    <select value={form.icon} onChange={e => setForm({ ...form, icon: e.target.value })}>
-                      {ICONS.map(ic => <option key={ic} value={ic}>{ic}</option>)}
-                    </select>
+                    <label>Cooldown (sec)</label>
+                    <input type="number" value={form.cooldownSeconds} onChange={e => setForm({ ...form, cooldownSeconds: Number(e.target.value) })} />
                   </div>
                 </div>
-                {!currentRoom && (
-                  <div className="form-group">
-                    <label>Room</label>
-                    <select value={form.room} onChange={e => setForm({ ...form, room: e.target.value })}>
-                      <option value="Global">Global</option>
-                      {(Array.isArray(rooms) ? rooms : []).map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
-                    </select>
-                  </div>
-                )}
               </div>
 
               <div className="setup-section">
                 <div className="setup-header">
                   <h3>2. Conditions</h3>
                   <button className="add-btn-small" onClick={addCond}>+ Add</button>
-                </div>
-                <div className="logic-config">
-                   <label>Execute if</label>
-                   <select value={form.conditionLogic} onChange={e => setForm({ ...form, conditionLogic: e.target.value })}>
-                     <option value="all">ALL match</option>
-                     <option value="any">ANY match</option>
-                   </select>
                 </div>
                 <div className="items-list">
                   {form.conditions.map((c, i) => (
@@ -384,7 +366,7 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
                         </select>
                         <input type="number" value={c.value} onChange={e => updateCond(i, 'value', e.target.value)} />
                       </div>
-                      <button className="remove-btn" onClick={() => removeCond(i)}>✕</button>
+                      <button className="remove-btn" onClick={() => removeCond(i)}><X size={14} /></button>
                     </div>
                   ))}
                 </div>
@@ -405,67 +387,29 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
                       <div className="item-card" key={i}>
                         <div className="action-main">
                           <select value={a.targetDeviceId} onChange={e => updateAction(i, 'targetDeviceId', e.target.value)}>
-                            <option value="">Select Device</option>
+                            <option value="">Device</option>
                             {(Array.isArray(allDevices) ? allDevices : []).map(d => <option key={d.deviceId} value={d.deviceId}>{d.title}</option>)}
                           </select>
-                          {type === 'touch-panel' && dev.subDevices && (
-                            <select value={a.subDeviceIndex || 0} onChange={e => updateAction(i, 'subDeviceIndex', Number(e.target.value))}>
-                              {dev.subDevices.map((sd, idx) => <option key={idx} value={idx}>{sd.label || `Switch ${idx + 1}`}</option>)}
-                            </select>
-                          )}
                           <select value={a.command} onChange={e => updateAction(i, 'command', e.target.value)}>
                             {cmds.map(c => <option key={c} value={c}>{fmtCmd(c, a.targetDeviceId)}</option>)}
                           </select>
                         </div>
-                        {a.command === 'set_speed' && (
-                           <div className="param-box">
-                             <label>Speed: {a.params?.speed || 1}</label>
-                             <input type="range" min="1" max="5" value={a.params?.speed || 1} onChange={e => updateAction(i, 'params', { ...a.params, speed: Number(e.target.value) })} />
-                           </div>
-                        )}
-                        {a.command === 'set_brightness' && (
-                           <div className="param-box">
-                             <label>Brightness: {Math.round(((a.params?.brightness || 255) / 255) * 100)}%</label>
-                             <input type="range" min="0" max="255" value={a.params?.brightness || 255} onChange={e => updateAction(i, 'params', { ...a.params, brightness: Number(e.target.value) })} />
-                           </div>
-                        )}
-                        {a.command === 'set_color' && (
-                           <div className="param-box">
-                             <label>Color</label>
-                             <input 
-                               type="color" 
-                               value={rgbToHex(a.params?.color || [255, 255, 255, 255])} 
-                               onChange={e => updateAction(i, 'params', { ...a.params, color: hexToRgb(e.target.value) })} 
-                             />
-                           </div>
-                        )}
-                        <button className="remove-btn" onClick={() => removeAction(i)}>✕</button>
+                        <button className="remove-btn" onClick={() => removeAction(i)}><X size={14} /></button>
                       </div>
                     );
                   })}
                 </div>
               </div>
-
-              <div className="setup-section settings">
-                <div className="cooldown-row">
-                  <label>Cooldown (sec)</label>
-                  <input type="number" value={form.cooldownSeconds} onChange={e => setForm({ ...form, cooldownSeconds: Number(e.target.value) })} />
-                </div>
-                <label className="global-toggle">
-                  <input type="checkbox" checked={form.room === 'Global'} onChange={e => setForm({ ...form, room: e.target.checked ? 'Global' : (currentRoom?.name || 'Global') })} />
-                  <span>🌍 Apply to all rooms</span>
-                </label>
-              </div>
             </div>
             <div className="modal-footer">
               <button className="cancel-btn" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="save-btn" onClick={saveRule}>Save Rule</button>
+              <button className="action-btn-pill primary" onClick={saveRule}>Save Automation</button>
             </div>
           </div>
         </div>
       )}
       <AddRoomModal isOpen={isRoomModalOpen} onClose={() => setIsRoomModalOpen(false)} onAdd={handleAddRoomLocal} />
-      {toast && <div className="toast-scene"><span>💡</span> {toast}</div>}
+      {toast && <div className="toast"><span>⚡</span> {toast}</div>}
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Power, Settings, Trash2 } from 'lucide-react';
 
 const DeviceCard = ({ title, status, on, icon, type, value, timerRemaining, onToggle, onAction }) => {
   return (
@@ -13,8 +14,12 @@ const DeviceCard = ({ title, status, on, icon, type, value, timerRemaining, onTo
       <div className="card-header">
         <div className={`icon-box ${on ? 'power-on' : 'power-off'}`}>{icon}</div>
         <div className="card-actions">
-          <button className="action-btn" onClick={(e) => { e.stopPropagation(); onAction('edit'); }}>✏️</button>
-          <button className="action-btn delete" onClick={(e) => { e.stopPropagation(); if (window.confirm(`Remove ${title}?`)) onAction('remove'); }}>🗑️</button>
+          <button className="action-btn" onClick={(e) => { e.stopPropagation(); onAction('edit'); }} title="Edit">
+            <Settings size={14} />
+          </button>
+          <button className="action-btn delete" onClick={(e) => { e.stopPropagation(); if (window.confirm(`Remove ${title}?`)) onAction('remove'); }} title="Remove">
+            <Trash2 size={14} />
+          </button>
         </div>
       </div>
 

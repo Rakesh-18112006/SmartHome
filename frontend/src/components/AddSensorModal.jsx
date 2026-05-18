@@ -20,49 +20,45 @@ const AddSensorModal = ({ isOpen, onClose, onAdd, rooms }) => {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content animate-slide-up glass" style={{ maxWidth: '500px', padding: '0', overflow: 'hidden' }}>
+      <div className="modal-content animate-slide-up" style={{ maxWidth: '420px', padding: '0', overflow: 'hidden' }}>
         <div className="modal-premium-header">
           <div className="header-bg-glow"></div>
           <div className="header-content-top">
             <div className="header-icon-circle">
-              <Activity size={24} />
+              <Activity size={20} />
             </div>
             <button className="close-pill-btn" onClick={onClose}>
-              <X size={18} />
+              <X size={16} />
             </button>
           </div>
           <div className="header-text-bottom">
             <h2>Add Custom Sensor</h2>
-            <p>Register a new MQTT telemetry source</p>
+            <p>Register a new telemetry source</p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="premium-form-body">
           <div className="form-section">
             <div className="input-field-wrapper">
-              <label><Tag size={12} /> Sensor Identity</label>
-              <div className="input-with-icon">
-                <input 
-                  type="text" 
-                  required
-                  placeholder="e.g. Living Room Pressure"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                />
-              </div>
+              <label><Tag size={12} /> Sensor Name</label>
+              <input 
+                type="text" 
+                required
+                placeholder="e.g. Living Room Pressure"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              />
             </div>
 
             <div className="input-field-wrapper">
-              <label><Link size={12} /> MQTT Topic Path</label>
-              <div className="input-with-icon">
-                <input 
-                  type="text" 
-                  required
-                  placeholder="smarthome/sensors/topic"
-                  value={formData.topic}
-                  onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
-                />
-              </div>
+              <label><Link size={12} /> MQTT Topic</label>
+              <input 
+                type="text" 
+                required
+                placeholder="smarthome/sensors/topic"
+                value={formData.topic}
+                onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
+              />
             </div>
 
             <div className="form-grid-2">
@@ -76,7 +72,7 @@ const AddSensorModal = ({ isOpen, onClose, onAdd, rooms }) => {
                 />
               </div>
               <div className="input-field-wrapper">
-                <label><MapPin size={12} /> Room Assignment</label>
+                <label><MapPin size={12} /> Room</label>
                 <select 
                   className="premium-select"
                   value={formData.room}
@@ -98,81 +94,109 @@ const AddSensorModal = ({ isOpen, onClose, onAdd, rooms }) => {
         </form>
 
         <style jsx>{`
+          .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(64, 52, 42, 0.2);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1200;
+          }
+          .modal-content {
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-deep);
+            border: 1px solid var(--border);
+          }
           .modal-premium-header {
             position: relative;
-            padding: 40px 32px 32px;
-            background: linear-gradient(135deg, var(--primary), #4f46e5);
+            padding: 24px;
+            background: var(--bg-sidebar);
             color: white;
             overflow: hidden;
           }
           .header-bg-glow {
             position: absolute;
-            top: -50px;
-            right: -50px;
-            width: 200px;
-            height: 200px;
-            background: rgba(255, 255, 255, 0.15);
-            filter: blur(40px);
+            top: -30px;
+            right: -30px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.08);
+            filter: blur(30px);
             border-radius: 50%;
           }
           .header-content-top {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            margin-bottom: 24px;
+            margin-bottom: 16px;
             position: relative;
             z-index: 1;
           }
           .header-icon-circle {
-            width: 54px;
-            height: 54px;
-            background: rgba(255, 255, 255, 0.2);
-            backdrop-filter: blur(10px);
-            border-radius: 18px;
+            width: 44px;
+            height: 44px;
+            background: rgba(255, 255, 255, 0.12);
+            border-radius: var(--radius-md);
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
           }
           .close-pill-btn {
-            background: rgba(0, 0, 0, 0.1);
-            color: white;
-            width: 32px;
-            height: 32px;
+            background: rgba(255, 255, 255, 0.08);
+            color: rgba(255, 255, 255, 0.6);
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
+            cursor: pointer;
+            transition: var(--transition);
+          }
+          .close-pill-btn:hover {
+            background: rgba(255, 255, 255, 0.14);
+            color: white;
+            transform: rotate(90deg);
           }
           .header-text-bottom h2 {
-            font-size: 24px;
-            font-weight: 800;
-            margin-bottom: 4px;
-            letter-spacing: -0.5px;
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 2px;
+            letter-spacing: -0.3px;
           }
           .header-text-bottom p {
-            font-size: 14px;
-            opacity: 0.8;
+            font-size: 11px;
+            opacity: 0.7;
             font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
           }
           .premium-form-body {
-            padding: 32px;
-            display: flex;
-            flex-direction: column;
-            gap: 24px;
-          }
-          .form-section {
+            padding: 24px;
             display: flex;
             flex-direction: column;
             gap: 20px;
           }
+          .form-section {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+          }
           .input-field-wrapper {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
           }
           .input-field-wrapper label {
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 800;
             color: var(--text-muted);
             text-transform: uppercase;
@@ -183,36 +207,33 @@ const AddSensorModal = ({ isOpen, onClose, onAdd, rooms }) => {
           }
           .input-field-wrapper input, .premium-select {
             width: 100%;
-            padding: 14px 18px;
-            border-radius: 14px;
-            border: 1.5px solid var(--border);
+            padding: 10px 14px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
             background: var(--bg-main);
             color: var(--text-main);
-            font-size: 15px;
-            font-weight: 600;
+            font-size: 14px;
+            font-weight: 500;
             transition: var(--transition);
+            outline: none;
           }
           .input-field-wrapper input:focus, .premium-select:focus {
             border-color: var(--primary);
-            background: white;
-            box-shadow: 0 0 0 4px var(--primary-glow);
+            background: var(--bg-card);
           }
           .form-grid-2 {
             display: grid;
             grid-template-columns: 1fr 1.5fr;
-            gap: 16px;
+            gap: 12px;
           }
           .premium-modal-footer {
             display: flex;
             gap: 12px;
-            margin-top: 8px;
+            margin-top: 4px;
           }
           .flex-grow { flex: 1; }
-          
-          [data-theme="dark"] .input-field-wrapper input:focus, 
-          [data-theme="dark"] .premium-select:focus {
-            background: rgba(255, 255, 255, 0.05);
-          }
+          .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+          @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         `}</style>
       </div>
     </div>
