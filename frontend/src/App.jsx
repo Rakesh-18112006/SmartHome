@@ -284,7 +284,10 @@ const App = () => {
           albumArt: haDevice.albumArt,
           volume: haDevice.volume,
           deviceClass: haDevice.deviceClass,
-          isMusicAssistant: haDevice.isMusicAssistant
+          isMusicAssistant: haDevice.isMusicAssistant,
+          mediaPosition: haDevice.mediaPosition,
+          mediaDuration: haDevice.mediaDuration,
+          mediaPositionUpdatedAt: haDevice.mediaPositionUpdatedAt
         };
 
         if (existingIndex >= 0) {

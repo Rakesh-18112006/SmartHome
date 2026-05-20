@@ -24,13 +24,14 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
   const [activeTab, setActiveTab] = useState('browse'); // 'browse' | 'search'
   const searchTimeout = useRef(null);
   const [currentProgress, setCurrentProgress] = useState(0);
+  const isSeeking = useRef(false);
 
   if (!players || players.length === 0) return null;
 
   // Find active player for controls
   let activePlayerRaw = players.find(p => p.deviceId === selectedId);
   if (!activePlayerRaw) {
-    activePlayerRaw = players.find(p => p.state === 'playing') || players[0];
+    activePlayerRaw = players.find(p => p.mediaState === 'playing') || players[0];
   }
   
   // Find Music Assistant equivalent for the active player
@@ -57,8 +58,9 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
 
   useEffect(() => {
     let interval;
-    if (activePlayerRaw && (activePlayerRaw.state === 'playing') && activePlayerRaw.mediaDuration) {
+    if (activePlayerRaw && (activePlayerRaw.mediaState === 'playing') && activePlayerRaw.mediaDuration) {
       interval = setInterval(() => {
+        if (isSeeking.current) return;
         if (!activePlayerRaw.mediaPositionUpdatedAt) return;
         const lastUpdated = new Date(activePlayerRaw.mediaPositionUpdatedAt).getTime();
         const elapsedSinceUpdate = (Date.now() - lastUpdated) / 1000;
@@ -68,13 +70,13 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
       }, 1000);
       
       // Initial set
-      if (activePlayerRaw.mediaPositionUpdatedAt) {
+      if (activePlayerRaw.mediaPositionUpdatedAt && !isSeeking.current) {
         const lastUpdated = new Date(activePlayerRaw.mediaPositionUpdatedAt).getTime();
         const elapsedSinceUpdate = (Date.now() - lastUpdated) / 1000;
         let pos = (activePlayerRaw.mediaPosition || 0) + elapsedSinceUpdate;
         setCurrentProgress(Math.min(pos, activePlayerRaw.mediaDuration));
       }
-    } else {
+    } else if (!isSeeking.current) {
       setCurrentProgress(activePlayerRaw?.mediaPosition || 0);
     }
     return () => clearInterval(interval);
@@ -87,10 +89,19 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const handleSeek = (e) => {
+  const handleSeekChange = (e) => {
     const newPos = parseFloat(e.target.value);
     setCurrentProgress(newPos);
+  };
+
+  const handleSeekEnd = (e) => {
+    isSeeking.current = false;
+    const newPos = parseFloat(e.target.value);
     onCommand(activePlayer.deviceId, 'media_seek', { seek_position: newPos });
+  };
+
+  const handleSeekStart = () => {
+    isSeeking.current = true;
   };
 
   const anyMaEntity = allPlayers.find(p => p.isMusicAssistant || p.deviceId.includes('mass_'));
@@ -105,13 +116,13 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
     onCommand(targetId, command, params);
   };
 
-  const handlePlayPause = (e, id, state) => {
+  const handlePlayPause = (e, id, mediaState) => {
     e.stopPropagation();
-    if (state === 'playing') {
-      setOptimistic(id, { state: 'paused' });
+    if (mediaState === 'playing') {
+      setOptimistic(id, { mediaState: 'paused' });
       broadcastCommand(id, 'media_pause');
     } else {
-      setOptimistic(id, { state: 'playing' });
+      setOptimistic(id, { mediaState: 'playing' });
       broadcastCommand(id, 'media_play');
     }
   };
@@ -327,7 +338,7 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
             </div>
             
             {/* Progress Bar */}
-            {(activePlayer.state === 'playing' || activePlayer.state === 'paused' || activePlayer.mediaDuration > 0) && (
+            {(activePlayer.mediaState === 'playing' || activePlayer.mediaState === 'paused' || activePlayer.mediaDuration > 0) && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', maxWidth: '400px' }}>
                 <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', minWidth: '40px', textAlign: 'right' }}>
                   {formatTime(currentProgress)}
@@ -335,7 +346,11 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
                 <input type="range" 
                   min="0" max={activePlayer.mediaDuration || 100} 
                   value={currentProgress || 0} 
-                  onChange={handleSeek}
+                  onChange={handleSeekChange}
+                  onMouseDown={handleSeekStart}
+                  onMouseUp={handleSeekEnd}
+                  onTouchStart={handleSeekStart}
+                  onTouchEnd={handleSeekEnd}
                   style={{ flex: 1, accentColor: '#d4a373', height: '4px' }} 
                 />
                 <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', minWidth: '40px' }}>
@@ -354,15 +369,15 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
                 <SkipBack size={24} />
               </button>
               
-              <button onClick={(e) => handlePlayPause(e, activePlayer.deviceId, activePlayer.state)}
+              <button onClick={(e) => handlePlayPause(e, activePlayer.deviceId, activePlayer.mediaState)}
                 style={{
-                  background: activePlayer.state === 'playing' ? 'rgba(212,163,115,0.2)' : 'rgba(255,255,255,0.1)',
-                  border: `1px solid ${activePlayer.state === 'playing' ? 'rgba(212,163,115,0.4)' : 'rgba(255,255,255,0.2)'}`,
+                  background: activePlayer.mediaState === 'playing' ? 'rgba(212,163,115,0.2)' : 'rgba(255,255,255,0.1)',
+                  border: `1px solid ${activePlayer.mediaState === 'playing' ? 'rgba(212,163,115,0.4)' : 'rgba(255,255,255,0.2)'}`,
                   color: '#fff', cursor: 'pointer', width: '56px', height: '56px', borderRadius: '50%',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   backdropFilter: 'blur(10px)', transition: 'all 0.2s'
                 }}>
-                {activePlayer.state === 'playing' ? <Pause size={28} /> : <Play size={28} style={{ marginLeft: '4px' }} />}
+                {activePlayer.mediaState === 'playing' ? <Pause size={28} /> : <Play size={28} style={{ marginLeft: '4px' }} />}
               </button>
               
               <button onClick={(e) => { e.stopPropagation(); broadcastCommand(activePlayer.deviceId, 'media_next_track'); }}

@@ -6,6 +6,7 @@ import Device from '../../modules/devices/Device.js';
 import Sensor from '../../modules/sensors/Sensor.js';
 import { publishStateToHA, syncAllDevicesToHA, handleHomeAssistantCommand, publishSensorStateToHA } from '../homeassistant/ha-discovery.js';
 import { callService, cachedHaStates } from '../homeassistant/ha-client.js';
+import { handlePresenceChange } from '../../modules/audio/followMeAudio.js';
 
 const MQTT_BROKER = process.env.MQTT_BROKER || 'mqtt://35.154.62.193:1883';
 const MQTT_STATUS_TOPIC = 'smart_home/rgbw/+/status';
@@ -281,6 +282,12 @@ export const connectMQTT = (io) => {
         customSensor.value = sensorVal;
         customSensor.lastUpdated = new Date();
         await customSensor.save();
+        
+        if (customSensor.room && customSensor.room !== 'Unassigned' && (customSensor.name.toLowerCase().includes('presence') || customSensor.name.toLowerCase().includes('motion'))) {
+          // If value is truthy (1, true, "on", "ON", "1"), it means presence is active
+          const isPresent = sensorVal === 1 || sensorVal === true || sensorVal === 'on' || sensorVal === 'ON' || sensorVal === '1';
+          handlePresenceChange(customSensor.room, isPresent);
+        }
         
         // Update automation engine with custom sensor data
         updateSensorData({ [customSensor.name]: sensorVal });
