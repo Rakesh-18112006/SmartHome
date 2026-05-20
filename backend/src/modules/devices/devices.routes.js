@@ -1,5 +1,6 @@
 import express from 'express';
-import Device from '../models/Device.js';
+import Device from './Device.js';
+import { publishDeviceToHA, removeDeviceFromHA } from '../../integrations/homeassistant/ha-discovery.js';
 
 const router = express.Router();
 
@@ -42,6 +43,11 @@ router.post('/', async (req, res) => {
 
   try {
     const newDevice = await device.save();
+    try {
+      await publishDeviceToHA(newDevice);
+    } catch (haErr) {
+      console.error('Failed to sync new device to HA:', haErr.message);
+    }
     res.status(201).json(newDevice);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -57,6 +63,11 @@ router.put('/:deviceId', async (req, res) => {
       { title, type, icon, room, subDevices, isConfigured: true },
       { new: true }
     );
+    try {
+      await publishDeviceToHA(updatedDevice);
+    } catch (haErr) {
+      console.error('Failed to update device in HA:', haErr.message);
+    }
     res.json(updatedDevice);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -66,7 +77,15 @@ router.put('/:deviceId', async (req, res) => {
 // Remove a device
 router.delete('/:deviceId', async (req, res) => {
   try {
-    await Device.findOneAndDelete({ deviceId: req.params.deviceId });
+    const device = await Device.findOne({ deviceId: req.params.deviceId });
+    if (device) {
+      try {
+        await removeDeviceFromHA(device);
+      } catch (haErr) {
+        console.error('Failed to remove device from HA:', haErr.message);
+      }
+      await Device.deleteOne({ deviceId: req.params.deviceId });
+    }
     res.json({ message: 'Device removed successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });

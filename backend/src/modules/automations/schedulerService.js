@@ -1,5 +1,5 @@
-import Device from '../models/Device.js';
-import { publishToTopic } from './mqttManager.js';
+import Device from '../devices/Device.js';
+import { publishToTopic } from '../../integrations/mqtt/mqttManager.js';
 
 export const startScheduler = (io) => {
   console.log('⏰ Custom Action Scheduler Service started');

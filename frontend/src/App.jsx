@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
-import { Power, Search, LayoutDashboard, Settings, Plus, Activity, Thermometer, Moon, Sun, Radio } from 'lucide-react';
+import { Power, Search, LayoutDashboard, Settings, Plus, Activity, Thermometer, Moon, Sun, Radio, Droplets, Footprints, Wind } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import DeviceCard from './components/DeviceCard';
 import ColorControl from './components/ColorControl';
@@ -10,6 +10,7 @@ import ConfigureDeviceModal from './components/ConfigureDeviceModal';
 import ProvisioningModal from './components/ProvisioningModal';
 import SensorCard from './components/SensorCard';
 import AddSensorModal from './components/AddSensorModal';
+import MusicDeck from './components/MusicDeck';
 
 // Dynamic API Base URL for network access
 const API_BASE = `http://${window.location.hostname}:3000`;
@@ -69,7 +70,21 @@ const App = () => {
     setTimeout(() => setToast(null), 4000);
   };
 
+  const handleMediaCommand = (entityId, service, serviceData = {}) => {
+    socket.emit('ha_command', {
+      domain: 'media_player',
+      service: service,
+      entityId: entityId,
+      serviceData: serviceData
+    });
+  };
+
   const isInteracting = useRef(false);
+  const sensorsRef = useRef(sensors);
+
+  useEffect(() => {
+    sensorsRef.current = sensors;
+  }, [sensors]);
 
   useEffect(() => {
     fetchDevices();
@@ -81,10 +96,13 @@ const App = () => {
     try {
       const res = await fetch(`${API_BASE}/api/devices`);
       const data = await res.json();
-      setDevices(Array.isArray(data) ? data : []);
+      // Preserve Home Assistant devices since they are only stored in memory via sockets
+      setDevices(prev => {
+        const haDevices = (Array.isArray(prev) ? prev : []).filter(d => d.isHomeAssistant);
+        return [...(Array.isArray(data) ? data : []), ...haDevices];
+      });
     } catch (err) {
       console.error('Failed to fetch devices', err);
-      setDevices([]);
     }
   };
 
@@ -213,7 +231,8 @@ const App = () => {
     fetchRooms();
     fetchSensors();
 
-    const refreshInterval = setInterval(fetchDevices, 5000);
+    // REMOVED 5-second polling loop which caused massive UI lag and slider jumping.
+    // We now rely entirely on the fast WebSocket events for real-time updates!
     
     socket.on('mqtt_status', (data) => setMqttStatus(data.status));
     
@@ -225,11 +244,67 @@ const App = () => {
       setSensors(prev => (Array.isArray(prev) ? prev : []).map(s => s._id === updatedSensor._id ? updatedSensor : s));
     });
 
+    socket.on('toast_message', (msg) => {
+      showToast(msg);
+    });
+
+    // Handle incoming Home Assistant normalized entities
+    socket.on('ha_entity_state_change', (haDevice) => {
+      setDevices(prev => {
+        const list = Array.isArray(prev) ? prev : [];
+        
+        const haName = (haDevice.name || '').toLowerCase();
+        const isLocalDevice = list.some(d => !d.isHomeAssistant && (d.title || '').toLowerCase() === haName);
+        const isLocalSensor = sensorsRef.current.some(s => (s.name || '').toLowerCase() === haName);
+        const isSelfPublished = haDevice.entity_id.includes('ha_switch') || haDevice.entity_id.includes('ha_light') || haDevice.entity_id.includes('ha_sensor') || haDevice.entity_id.includes('ha_fan') || haDevice.entity_id.includes('ha_rgbw');
+
+        if (isLocalDevice || isLocalSensor || isSelfPublished) {
+          return list;
+        }
+
+        const existingIndex = list.findIndex(d => d.deviceId === haDevice.entity_id);
+        
+        // Map HA entity to standard device format expected by UI
+        const mappedDevice = {
+          deviceId: haDevice.entity_id,
+          title: haDevice.name,
+          type: haDevice.type === 'switch' ? 'plug' : haDevice.type, // UI expects plug/light/rgbw/curtain
+          room: haDevice.room || 'Unassigned', // Dynamically map HA Room
+          isOnline: haDevice.state !== 'unavailable' && haDevice.state !== 'unknown',
+          on: haDevice.on,
+          // HA mapper provides brightness 0-100, UI internal state expects 0-255
+          brightness: haDevice.brightness !== undefined ? Math.round((haDevice.brightness / 100) * 255) : 255,
+          icon: haDevice.type === 'light' ? '💡' : (haDevice.type === 'media_player' ? '🎵' : '🔌'),
+          isConfigured: true,
+          isHomeAssistant: true,
+          mediaState: haDevice.state,
+          mediaTitle: haDevice.mediaTitle,
+          mediaArtist: haDevice.mediaArtist,
+          mediaAlbum: haDevice.mediaAlbum,
+          albumArt: haDevice.albumArt,
+          volume: haDevice.volume,
+          deviceClass: haDevice.deviceClass,
+          isMusicAssistant: haDevice.isMusicAssistant
+        };
+
+        if (existingIndex >= 0) {
+          // Update existing
+          const updated = [...list];
+          updated[existingIndex] = { ...updated[existingIndex], ...mappedDevice };
+          return updated;
+        } else {
+          // Add new HA device to the dashboard
+          return [...list, mappedDevice];
+        }
+      });
+    });
+
     return () => {
       socket.off('mqtt_status');
       socket.off('device_state_update');
       socket.off('custom_sensor_update');
-      clearInterval(refreshInterval);
+      socket.off('toast_message');
+      socket.off('ha_entity_state_change');
     };
   }, []);
 
@@ -261,6 +336,14 @@ const App = () => {
   const toggleLight = (val) => {
     setLightStatus(val);
     if (selectedDevice) {
+      if (selectedDevice.isHomeAssistant) {
+        socket.emit('ha_command', {
+          domain: selectedDevice.type === 'plug' ? 'switch' : selectedDevice.type,
+          service: val ? 'turn_on' : 'turn_off',
+          entityId: selectedDevice.deviceId
+        });
+        return;
+      }
       const isPlug = selectedDevice.type === 'plug' || selectedDevice.type === 'switch';
       const payload = isPlug
         ? { entityId: selectedDevice.deviceId, relayStatus: val ? 'ON' : 'OFF' }
@@ -328,12 +411,30 @@ const App = () => {
     const value = parseInt(val);
     setBrightness(value);
     if (selectedDevice) {
+      if (selectedDevice.isHomeAssistant && selectedDevice.type === 'light') {
+        throttleEmit('ha_command', {
+          domain: 'light',
+          service: 'turn_on',
+          entityId: selectedDevice.deviceId,
+          serviceData: { brightness: Math.round((value / 255) * 100) } // HA brightness pct
+        });
+        return;
+      }
       throttleEmit('brightness_change', { deviceId: selectedDevice.deviceId, brightness: value });
     }
   };
 
   const handleColorChange = (color) => {
     if (selectedDevice) {
+      if (selectedDevice.isHomeAssistant && selectedDevice.type === 'light') {
+        throttleEmit('ha_command', {
+          domain: 'light',
+          service: 'turn_on',
+          entityId: selectedDevice.deviceId,
+          serviceData: { rgb_color: [color.r, color.g, color.b] }
+        });
+        return;
+      }
       throttleEmit('color_change', { deviceId: selectedDevice.deviceId, ...color, w: whiteIntensity });
     }
   };
@@ -342,6 +443,15 @@ const App = () => {
     const value = parseInt(val);
     setWhiteIntensity(value);
     if (selectedDevice) {
+      if (selectedDevice.isHomeAssistant && selectedDevice.type === 'light') {
+        throttleEmit('ha_command', {
+          domain: 'light',
+          service: 'turn_on',
+          entityId: selectedDevice.deviceId,
+          serviceData: { color_temp_kelvin: value * 20 } // Rough mapping
+        });
+        return;
+      }
       throttleEmit('white_change', { deviceId: selectedDevice.deviceId, white: value });
     }
   };
@@ -777,10 +887,17 @@ const App = () => {
 
       {!currentRoom ? (
         <div className="rooms-grid">
-          {(Array.isArray(rooms) ? rooms : []).map(room => {
-            const roomDevices = (Array.isArray(devices) ? devices : []).filter(d => d.room === room.name && d.isConfigured);
-            const activeCount = roomDevices.filter(d => d.on).length;
-            return (
+          {(() => {
+            const dbRooms = Array.isArray(rooms) ? rooms : [];
+            const devList = Array.isArray(devices) ? devices : [];
+            const dynamicRooms = Array.from(new Set(devList.filter(d => d.isHomeAssistant && d.room).map(d => d.room)))
+              .filter(roomName => roomName !== 'Unassigned' && roomName !== 'Home Assistant' && !dbRooms.find(r => r.name === roomName))
+              .map(roomName => ({ name: roomName, icon: '🏠' }));
+            
+            return [...dbRooms, ...dynamicRooms].map(room => {
+              const roomDevices = devList.filter(d => d.room === room.name && d.isConfigured);
+              const activeCount = roomDevices.filter(d => d.on).length;
+              return (
               <div key={room.name} className="room-card-wrapper">
                 <div className="room-card glass card-hover" onClick={() => setCurrentRoom(room)}>
                   <div className="room-card-header">
@@ -800,28 +917,77 @@ const App = () => {
                 </div>
               </div>
             );
-          })}
+          })})()}
         </div>
       ) : (
         <div className="devices-view-content animate-slide-up">
-          <div className="devices-grid">
-            {(Array.isArray(devices) ? devices : []).filter(d => d.room === currentRoom.name && d.isConfigured).map(device => (
-              <DeviceCard
-                key={device.deviceId}
-                title={device.title}
-                status={device.isOnline}
-                on={device.on}
-                icon={device.icon || "💡"}
-                type={device.type}
-                onToggle={() => toggleLight(!device.on)}
-                onAction={(action) => {
-                  if (action === 'navigate') setSelectedDevice(device);
-                  else if (action === 'edit') setConfiguringDevice(device);
-                  else if (action === 'remove') handleRemoveDevice(device.deviceId);
-                }}
-              />
-            ))}
-          </div>
+          {(() => {
+            const roomSensors = (Array.isArray(sensors) ? sensors : []).filter(s => s.room === currentRoom.name);
+            return (
+              <>
+                {roomSensors.length > 0 && (
+                  <div className="sensor-bar" style={{ marginBottom: '24px' }}>
+                    {roomSensors.map(sensor => {
+                      let Icon = Radio;
+                      const n = (sensor.name || '').toLowerCase();
+                      if (n.includes('temp')) Icon = Thermometer;
+                      else if (n.includes('humid')) Icon = Droplets;
+                      else if (n.includes('lux') || n.includes('light')) Icon = Sun;
+                      else if (n.includes('motion') || n.includes('pres')) Icon = Footprints;
+                      else if (n.includes('co2') || n.includes('air')) Icon = Activity;
+                      
+                      let val = sensor.value;
+                      if (typeof val === 'string' && val.startsWith('{')) {
+                        try {
+                          const parsed = JSON.parse(val);
+                          val = parsed;
+                        } catch (e) {}
+                      }
+                      if (typeof val === 'object' && val !== null) {
+                        val = val.value !== undefined ? val.value : (val.val !== undefined ? val.val : JSON.stringify(val));
+                      }
+                      
+                      return (
+                        <div className="sensor-chip" key={sensor._id}>
+                          <span className="icon"><Icon size={20} /></span>
+                          <div className="info">
+                            <span className="label">{sensor.name}</span>
+                            <span className="val">{val}{sensor.unit ? ` ${sensor.unit}` : ''}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                
+                <MusicDeck 
+                  socket={socket}
+                  players={(Array.isArray(devices) ? devices : []).filter(d => d.room === currentRoom.name && d.type === 'media_player' && d.deviceClass !== 'tv')} 
+                  allMediaPlayers={(Array.isArray(devices) ? devices : []).filter(d => d.type === 'media_player')}
+                  onCommand={handleMediaCommand} 
+                />
+
+                <div className="devices-grid">
+                  {(Array.isArray(devices) ? devices : []).filter(d => d.room === currentRoom.name && d.isConfigured && d.type !== 'media_player').map(device => (
+                    <DeviceCard
+                      key={device.deviceId}
+                      title={device.title}
+                      status={device.isOnline}
+                      on={device.on}
+                      icon={device.icon || "💡"}
+                      type={device.type}
+                      onToggle={() => toggleLight(!device.on)}
+                      onAction={(action) => {
+                        if (action === 'navigate') setSelectedDevice(device);
+                        else if (action === 'edit') setConfiguringDevice(device);
+                        else if (action === 'remove') handleRemoveDevice(device.deviceId);
+                      }}
+                    />
+                  ))}
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
     </div>
@@ -1003,7 +1169,7 @@ const App = () => {
           ) : (
             <>
               {activeTab === 'dashboard' && renderDashboard()}
-              {activeTab === 'scenes' && <Scenes socket={socket} rooms={rooms} allDevices={devices} onAddRoom={handleAddRoom} />}
+              {activeTab === 'scenes' && <Scenes socket={socket} rooms={rooms} allDevices={devices} sensors={sensors} onAddRoom={handleAddRoom} />}
               {activeTab === 'sensors' && renderSensorsSection()}
               {activeTab === 'devices' && renderDevicesView()}
               {activeTab === 'settings' && renderSettingsView()}

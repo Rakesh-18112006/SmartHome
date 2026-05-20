@@ -1,6 +1,6 @@
 import express from 'express';
-import Automation from '../models/Automation.js';
-import { getSensorData } from '../services/automationEngine.js';
+import Automation from './Automation.js';
+import { getSensorData } from './automationEngine.js';
 
 const router = express.Router();
 

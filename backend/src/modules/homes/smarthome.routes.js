@@ -3,7 +3,7 @@ import {
   smarthomeFulfillment,
   fakeAuth,
   fakeToken,
-} from '../controllers/smarthomeController.js';
+} from './smarthome.controller.js';
 
 const router = express.Router();
 

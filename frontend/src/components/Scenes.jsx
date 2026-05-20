@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Plus, ChevronLeft, Home, Globe, Trash2, Edit3, 
   Thermometer, Droplets, Sun, Footprints, Radio, 
-  Settings, Power, Play, X, CheckCircle2, AlertCircle
+  Settings, Power, Play, X, CheckCircle2, AlertCircle, Activity
 } from 'lucide-react';
 import './Scenes.css';
 import AddRoomModal from './AddRoomModal';
@@ -49,7 +49,7 @@ const rgbToHex = (rgb) => {
   return "#" + ((1 << 24) + (rgb[0] << 16) + (rgb[1] << 8) + rgb[2]).toString(16).slice(1);
 };
 
-const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
+const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
   const [rules, setRules] = useState([]);
   const [sensorData, setSensorData] = useState({ temperature: 25, humidity: 50, lux: 0, motion: false });
   const [availableSensors, setAvailableSensors] = useState(['temperature', 'humidity', 'lux', 'motion']);
@@ -220,7 +220,8 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
   };
 
   return (
-    <div className="scenes-view animate-slide-up">
+    <>
+      <div className="scenes-view animate-slide-up">
       <div className="scenes-header">
         <div>
           <h1>{currentRoom ? currentRoom.name : 'Automations'}</h1>
@@ -241,24 +242,46 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
       </div>
 
       {currentRoom && (
-        <div className="sensor-bar">
-          <div className="sensor-chip">
-            <span className="icon"><Thermometer size={20} /></span>
-            <div className="info"><span className="label">Temp</span><span className="val">{sensorData.temperature}°C</span></div>
-          </div>
-          <div className="sensor-chip">
-            <span className="icon"><Droplets size={20} /></span>
-            <div className="info"><span className="label">Humidity</span><span className="val">{sensorData.humidity}%</span></div>
-          </div>
-          <div className="sensor-chip">
-            <span className="icon"><Sun size={20} /></span>
-            <div className="info"><span className="label">Lux</span><span className="val">{sensorData.lux} lx</span></div>
-          </div>
-          <div className="sensor-chip">
-            <span className="icon"><Footprints size={20} /></span>
-            <div className="info"><span className="label">Motion</span><span className="val">{sensorData.motion ? 'Active' : 'None'}</span></div>
-          </div>
-        </div>
+        <>
+          {(() => {
+            const roomSensors = (Array.isArray(sensors) ? sensors : []).filter(s => s.room === currentRoom.name);
+            if (roomSensors.length === 0) return null;
+            return (
+              <div className="sensor-bar" style={{ marginBottom: '24px' }}>
+                {roomSensors.map(sensor => {
+                  let Icon = Radio;
+                  const n = (sensor.name || '').toLowerCase();
+                  if (n.includes('temp')) Icon = Thermometer;
+                  else if (n.includes('humid')) Icon = Droplets;
+                  else if (n.includes('lux') || n.includes('light')) Icon = Sun;
+                  else if (n.includes('motion') || n.includes('pres')) Icon = Footprints;
+                  else if (n.includes('co2') || n.includes('air')) Icon = Activity;
+                  
+                  let val = sensor.value;
+                  if (typeof val === 'string' && val.startsWith('{')) {
+                    try {
+                      const parsed = JSON.parse(val);
+                      val = parsed;
+                    } catch (e) {}
+                  }
+                  if (typeof val === 'object' && val !== null) {
+                    val = val.value !== undefined ? val.value : (val.val !== undefined ? val.val : JSON.stringify(val));
+                  }
+                  
+                  return (
+                    <div className="sensor-chip" key={sensor._id}>
+                      <span className="icon"><Icon size={20} /></span>
+                      <div className="info">
+                        <span className="label">{sensor.name}</span>
+                        <span className="val">{val}{sensor.unit ? ` ${sensor.unit}` : ''}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </>
       )}
 
       {!currentRoom ? (
@@ -327,90 +350,127 @@ const Scenes = ({ socket, rooms, allDevices, onAddRoom }) => {
         </div>
       )}
 
-      {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
-          <div className="modal glass scene-modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>{editId ? 'Edit Rule' : 'New Rule'}</h2>
-              <button className="modal-close" onClick={() => setShowModal(false)}><X size={18} /></button>
+    </div>
+
+    {showModal && (
+      <div className="scenes-modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="scenes-modal-content animate-slide-up" onClick={e => e.stopPropagation()}>
+          <div className="modal-premium-header">
+            <div className="header-bg-glow"></div>
+            <div className="header-content-top">
+              <div className="header-icon-circle">
+                <Radio size={20} />
+              </div>
+              <button className="close-pill-btn" onClick={() => setShowModal(false)}>
+                <X size={16} />
+              </button>
             </div>
-            <div className="modal-body">
-              <div className="setup-section">
-                <h3>1. Details</h3>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Name</label>
-                    <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Enter name..." />
+            <div className="header-text-bottom">
+              <h2>{editId ? 'Edit Automation' : 'New Automation'}</h2>
+              <p>Configure rule conditions and actions</p>
+            </div>
+          </div>
+
+          <div className="premium-form-body" style={{ maxHeight: '360px', overflowY: 'auto', padding: '16px', gap: '14px' }}>
+            <div className="form-section" style={{ gap: '12px' }}>
+              <div className="input-field-wrapper" style={{ gap: '6px' }}>
+                <label style={{ fontSize: '10px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Settings size={11} /> 1. Rule Details
+                </label>
+                <div className="form-grid-2" style={{ gap: '10px' }}>
+                  <div className="input-field-wrapper" style={{ gap: '4px' }}>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>Rule Name</span>
+                    <input 
+                      value={form.name} 
+                      onChange={e => setForm({ ...form, name: e.target.value })} 
+                      placeholder="e.g. Temp Alert" 
+                      style={{ padding: '8px 12px', borderRadius: '10px', fontSize: '13px' }}
+                    />
                   </div>
-                  <div className="form-group">
-                    <label>Cooldown (sec)</label>
-                    <input type="number" value={form.cooldownSeconds} onChange={e => setForm({ ...form, cooldownSeconds: Number(e.target.value) })} />
+                  <div className="input-field-wrapper" style={{ gap: '4px' }}>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600 }}>Cooldown (sec)</span>
+                    <input 
+                      type="number" 
+                      value={form.cooldownSeconds} 
+                      onChange={e => setForm({ ...form, cooldownSeconds: Number(e.target.value) })} 
+                      style={{ padding: '8px 12px', borderRadius: '10px', fontSize: '13px' }}
+                    />
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div className="setup-section">
-                <div className="setup-header">
-                  <h3>2. Conditions</h3>
-                  <button className="add-btn-small" onClick={addCond}>+ Add</button>
-                </div>
-                <div className="items-list">
-                  {form.conditions.map((c, i) => (
-                    <div className="item-card" key={i}>
-                      <div className="item-controls">
-                        <select value={c.sensor} onChange={e => updateCond(i, 'sensor', e.target.value)}>
-                          {availableSensors.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                        <select value={c.operator} onChange={e => updateCond(i, 'operator', e.target.value)}>
-                          {Object.entries(OPS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                        </select>
-                        <input type="number" value={c.value} onChange={e => updateCond(i, 'value', e.target.value)} />
-                      </div>
-                      <button className="remove-btn" onClick={() => removeCond(i)}><X size={14} /></button>
+            <div className="form-section" style={{ borderTop: '1px solid var(--border)', paddingTop: '14px', gap: '10px' }}>
+              <div className="setup-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <label style={{ fontSize: '10px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Radio size={11} /> 2. Conditions
+                </label>
+                <button className="action-btn-pill secondary" style={{ padding: '4px 10px', minHeight: '26px', fontSize: '11px', borderRadius: '8px' }} onClick={addCond}>+ Add</button>
+              </div>
+              <div className="items-list" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {form.conditions.map((c, i) => (
+                  <div className="item-card" key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                    <div className="item-controls" style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr 1fr', gap: '6px', flexGrow: 1 }}>
+                      <select className="premium-select" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px' }} value={c.sensor} onChange={e => updateCond(i, 'sensor', e.target.value)}>
+                        {availableSensors.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                      <select className="premium-select" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px' }} value={c.operator} onChange={e => updateCond(i, 'operator', e.target.value)}>
+                        {Object.entries(OPS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                      <input className="premium-input" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px', width: '100%', border: '1.5px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', outline: 'none' }} type="number" value={c.value} onChange={e => updateCond(i, 'value', e.target.value)} />
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="setup-section">
-                <div className="setup-header">
-                  <h3>3. Actions</h3>
-                  <button className="add-btn-small" onClick={addAction}>+ Add</button>
-                </div>
-                <div className="items-list">
-                  {form.actions.map((a, i) => {
-                    const dev = allDevices.find(d => d.deviceId === a.targetDeviceId);
-                    const type = dev ? (dev.deviceId.startsWith('BSQ') ? 'touch-panel' : dev.type) : 'default';
-                    const cmds = DEVICE_COMMANDS[type] || DEVICE_COMMANDS.default;
-
-                    return (
-                      <div className="item-card" key={i}>
-                        <div className="action-main">
-                          <select value={a.targetDeviceId} onChange={e => updateAction(i, 'targetDeviceId', e.target.value)}>
-                            <option value="">Device</option>
-                            {(Array.isArray(allDevices) ? allDevices : []).map(d => <option key={d.deviceId} value={d.deviceId}>{d.title}</option>)}
-                          </select>
-                          <select value={a.command} onChange={e => updateAction(i, 'command', e.target.value)}>
-                            {cmds.map(c => <option key={c} value={c}>{fmtCmd(c, a.targetDeviceId)}</option>)}
-                          </select>
-                        </div>
-                        <button className="remove-btn" onClick={() => removeAction(i)}><X size={14} /></button>
-                      </div>
-                    );
-                  })}
-                </div>
+                    {form.conditions.length > 1 && (
+                      <button className="close-pill-btn" style={{ background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', width: '26px', height: '26px' }} onClick={() => removeCond(i)}><X size={12} /></button>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
-            <div className="modal-footer">
-              <button className="cancel-btn" onClick={() => setShowModal(false)}>Cancel</button>
-              <button className="action-btn-pill primary" onClick={saveRule}>Save Automation</button>
+
+            <div className="form-section" style={{ borderTop: '1px solid var(--border)', paddingTop: '14px', gap: '10px' }}>
+              <div className="setup-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <label style={{ fontSize: '10px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Play size={11} /> 3. Actions
+                </label>
+                <button className="action-btn-pill secondary" style={{ padding: '4px 10px', minHeight: '26px', fontSize: '11px', borderRadius: '8px' }} onClick={addAction}>+ Add</button>
+              </div>
+              <div className="items-list" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {form.actions.map((a, i) => {
+                  const dev = allDevices.find(d => d.deviceId === a.targetDeviceId);
+                  const type = dev ? (dev.deviceId.startsWith('BSQ') ? 'touch-panel' : dev.type) : 'default';
+                  const cmds = DEVICE_COMMANDS[type] || DEVICE_COMMANDS.default;
+
+                  return (
+                    <div className="item-card" key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                      <div className="action-main" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', flexGrow: 1 }}>
+                        <select className="premium-select" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px' }} value={a.targetDeviceId} onChange={e => updateAction(i, 'targetDeviceId', e.target.value)}>
+                          <option value="">Select Device</option>
+                          {(Array.isArray(allDevices) ? allDevices : []).map(d => <option key={d.deviceId} value={d.deviceId}>{d.title}</option>)}
+                        </select>
+                        <select className="premium-select" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px' }} value={a.command} onChange={e => updateAction(i, 'command', e.target.value)}>
+                          {cmds.map(c => <option key={c} value={c}>{fmtCmd(c, a.targetDeviceId)}</option>)}
+                        </select>
+                      </div>
+                      {form.actions.length > 1 && (
+                        <button className="close-pill-btn" style={{ background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', width: '26px', height: '26px' }} onClick={() => removeAction(i)}><X size={12} /></button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="premium-modal-footer" style={{ borderTop: '1px solid var(--border)', paddingTop: '14px' }}>
+              <button type="button" className="action-btn-pill secondary" style={{ minHeight: '36px', fontSize: '13px' }} onClick={() => setShowModal(false)}>Cancel</button>
+              <button type="button" className="action-btn-pill primary" style={{ flexGrow: 1, minHeight: '36px', fontSize: '13px' }} onClick={saveRule}>Save Automation</button>
             </div>
           </div>
         </div>
-      )}
-      <AddRoomModal isOpen={isRoomModalOpen} onClose={() => setIsRoomModalOpen(false)} onAdd={handleAddRoomLocal} />
-      {toast && <div className="toast"><span>⚡</span> {toast}</div>}
-    </div>
+      </div>
+    )}
+    <AddRoomModal isOpen={isRoomModalOpen} onClose={() => setIsRoomModalOpen(false)} onAdd={handleAddRoomLocal} />
+    {toast && <div className="toast"><span>⚡</span> {toast}</div>}
+  </>
   );
 };
 

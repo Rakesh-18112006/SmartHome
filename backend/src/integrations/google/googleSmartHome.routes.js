@@ -1,7 +1,7 @@
 import express from 'express';
 import { smarthome } from 'actions-on-google';
-import Device from '../models/Device.js';
-import { publishToTopic } from '../services/mqttManager.js';
+import Device from '../../modules/devices/Device.js';
+import { publishToTopic } from '../mqtt/mqttManager.js';
 
 const router = express.Router();
 

@@ -1,6 +1,9 @@
-import { publishToTopic } from './mqttManager.js';
-import Device from '../models/Device.js';
-import { getSensorData, updateSensorData, evaluateAutomations } from './automationEngine.js';
+import { publishToTopic } from '../../integrations/mqtt/mqttManager.js';
+import Device from '../../modules/devices/Device.js';
+import Automation from '../../modules/automations/Automation.js';
+import { getSensorData, updateSensorData, evaluateAutomations } from '../../modules/automations/automationEngine.js';
+import { callService, sendMessage, cachedHaStates } from '../../integrations/homeassistant/ha-client.js';
+import { publishStateToHA } from '../../integrations/homeassistant/ha-discovery.js';
 
 export const initSocket = (io, mqttClient) => {
   io.on('connection', (socket) => {
@@ -9,6 +12,129 @@ export const initSocket = (io, mqttClient) => {
     // Send current MQTT status immediately
     socket.emit('mqtt_status', { 
       status: mqttClient.connected ? 'Connected' : 'Offline' 
+    });
+
+    // Send currently cached Home Assistant states to the new client
+    cachedHaStates.forEach(state => {
+      socket.emit('ha_entity_state_change', state);
+    });
+
+    socket.on('ha_command', (data) => {
+      const { domain, service, entityId, serviceData } = data;
+      console.log(`[HA] Received command from frontend: ${domain}.${service} on ${entityId}`);
+      callService(domain, service, { entity_id: entityId, ...serviceData });
+    });
+
+    socket.on('ha_browse_media', (data, ack) => {
+      console.log(`[HA] Browsing media for ${data.entity_id} (${data.media_content_type || 'root'})`);
+      const payload = {
+        type: 'media_player/browse_media',
+        entity_id: data.entity_id
+      };
+      // Only include content_type and content_id if provided (root browse omits them)
+      if (data.media_content_type) payload.media_content_type = data.media_content_type;
+      if (data.media_content_id) payload.media_content_id = data.media_content_id;
+      
+      sendMessage(payload, (response) => {
+        if (ack) ack(response);
+      });
+    });
+
+    socket.on('ha_search_media', (data, ack) => {
+      console.log(`[HA] Searching media for "${data.query}" on Music Assistant`);
+      
+      let maConfigEntryId = null;
+      for (const [id, state] of cachedHaStates.entries()) {
+        if (state.platform === 'music_assistant' && state.configEntryId) {
+          maConfigEntryId = state.configEntryId;
+          break;
+        }
+      }
+
+      // Use call_service with return_response to get the search results directly
+      const payload = {
+        type: 'call_service',
+        domain: 'music_assistant',
+        service: 'search',
+        service_data: {
+          name: data.query,
+          media_type: ['track', 'album', 'artist', 'playlist'],
+          limit: 25,
+          library_only: false,
+          ...(maConfigEntryId && { config_entry_id: maConfigEntryId })
+        },
+        return_response: true
+      };
+      
+      sendMessage(payload, (response) => {
+        if (response && response.result && response.result.response) {
+          // Transform MA search results into browse_media-like format for the frontend
+          const raw = response.result.response || {};
+          const children = [];
+          
+          // Process tracks
+          if (raw.tracks) {
+            raw.tracks.forEach(t => {
+              children.push({
+                title: `${t.name}${t.artists ? ' — ' + t.artists.map(a => a.name).join(', ') : ''}`,
+                media_content_id: t.uri,
+                media_content_type: 'music',
+                media_class: 'track',
+                can_play: true,
+                can_expand: false,
+                thumbnail: typeof t.image === 'string' ? t.image : (t.image?.url || t.metadata?.images?.[0]?.url || null)
+              });
+            });
+          }
+          // Process albums  
+          if (raw.albums) {
+            raw.albums.forEach(a => {
+              children.push({
+                title: `${a.name}${a.artists ? ' — ' + a.artists.map(ar => ar.name).join(', ') : ''}`,
+                media_content_id: a.uri,
+                media_content_type: 'music',
+                media_class: 'album',
+                can_play: true,
+                can_expand: true,
+                thumbnail: typeof a.image === 'string' ? a.image : (a.image?.url || a.metadata?.images?.[0]?.url || null)
+              });
+            });
+          }
+          // Process artists
+          if (raw.artists) {
+            raw.artists.forEach(a => {
+              children.push({
+                title: a.name,
+                media_content_id: a.uri,
+                media_content_type: 'music',
+                media_class: 'artist',
+                can_play: false,
+                can_expand: true,
+                thumbnail: typeof a.image === 'string' ? a.image : (a.image?.url || a.metadata?.images?.[0]?.url || null)
+              });
+            });
+          }
+          // Process playlists
+          if (raw.playlists) {
+            raw.playlists.forEach(p => {
+              children.push({
+                title: p.name,
+                media_content_id: p.uri,
+                media_content_type: 'playlist',
+                media_class: 'playlist',
+                can_play: true,
+                can_expand: true,
+                thumbnail: typeof p.image === 'string' ? p.image : (p.image?.url || p.metadata?.images?.[0]?.url || null)
+              });
+            });
+          }
+          
+          if (ack) ack({ success: true, result: { children } });
+        } else {
+          console.log('[HA] Search response:', JSON.stringify(response));
+          if (ack) ack({ success: false, result: { children: [] } });
+        }
+      });
     });
 
     socket.on('power_toggle', async (data) => {
@@ -67,6 +193,11 @@ export const initSocket = (io, mqttClient) => {
 
       const updatedDevice = await Device.findOne({ deviceId });
       io.emit('device_updated', updatedDevice);
+      try {
+        await publishStateToHA(updatedDevice);
+      } catch (haErr) {
+        console.error(`[HA PANEL SYNC] Failed to sync panel all-off:`, haErr.message);
+      }
     });
 
     socket.on('touch_panel_action', async (data) => {
@@ -104,6 +235,11 @@ export const initSocket = (io, mqttClient) => {
       // Update local devices and emit
       const updatedDevice = await Device.findOne({ deviceId });
       io.emit('device_updated', updatedDevice);
+      try {
+        await publishStateToHA(updatedDevice);
+      } catch (haErr) {
+        console.error(`[HA PANEL ACTION SYNC] Failed to sync:`, haErr.message);
+      }
     });
 
     socket.on('set_offline_timer', async (data) => {
@@ -169,12 +305,17 @@ export const initSocket = (io, mqttClient) => {
 
       // Execute publish and DB update in parallel for maximum speed
       const [updatedDevice] = await Promise.all([
-        Device.findOneAndUpdate({ deviceId }, updates, { new: true }),
+        Device.findOneAndUpdate({ deviceId }, updates, { returnDocument: 'after' }),
         publishToTopic(finalTopic, mqttPayload)
       ]);
 
       if (updatedDevice) {
         io.emit('device_state_update', updatedDevice);
+        try {
+          await publishStateToHA(updatedDevice);
+        } catch (haErr) {
+          console.error(`[HA SOCKET SYNC] Failed to sync ${deviceId} to HA:`, haErr.message);
+        }
         return updatedDevice;
       }
       return null;

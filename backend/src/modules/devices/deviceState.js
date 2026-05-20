@@ -1,4 +1,4 @@
-import { publishToLight } from './mqttManager.js';
+import { publishToLight } from '../../integrations/mqtt/mqttManager.js';
 
 let currentState = {
   state: 'OFF',

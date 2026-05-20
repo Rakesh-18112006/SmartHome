@@ -1,5 +1,5 @@
-import Device from '../models/Device.js';
-import { publishToTopic } from '../services/mqttManager.js';
+import Device from '../devices/Device.js';
+import { publishToTopic } from '../../integrations/mqtt/mqttManager.js';
 
 // ═══════════════════════════════════════════════════════════════════════
 //  DEVICE TYPE MAPPING

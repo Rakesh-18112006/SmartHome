@@ -2196,3 +2196,6 @@ button:active {
 [data-theme="dark"] .premium-select:focus {
   background: rgba(255, 255, 255, 0.05);
 }
+
+.spin { animation: spin 1.5s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }

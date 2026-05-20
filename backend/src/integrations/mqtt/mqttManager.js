@@ -35,13 +35,13 @@ export function publishToTopic(topic, payload) {
       return resolve(false);
     }
 
-    const message = JSON.stringify(payload);
+    const message = typeof payload === 'string' ? payload : JSON.stringify(payload);
     _mqttClient.publish(topic, message, (err) => {
       if (err) {
         console.error(`[MQTT BRIDGE] Publish error on ${topic}:`, err.message);
         return reject(err);
       }
-      console.log(`[MQTT BRIDGE] Published to ${topic}: ${message}`);
+      // console.log(`[MQTT BRIDGE] Published to ${topic}: ${message}`); // Disabled to prevent continuous log spam from frequent telemetry updates
       return resolve(true);
     });
   });

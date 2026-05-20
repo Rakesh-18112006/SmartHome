@@ -1,9 +1,11 @@
 import mqtt from 'mqtt';
-import { setMqttClient } from '../services/mqttManager.js';
-import { getState, updateState } from '../services/deviceState.js';
-import { updateSensorData, evaluateAutomations, getSensorData } from '../services/automationEngine.js';
-import Device from '../models/Device.js';
-import Sensor from '../models/Sensor.js';
+import { setMqttClient } from './mqttManager.js';
+import { getState, updateState } from '../../modules/devices/deviceState.js';
+import { updateSensorData, evaluateAutomations, getSensorData, isEngineExecuting } from '../../modules/automations/automationEngine.js';
+import Device from '../../modules/devices/Device.js';
+import Sensor from '../../modules/sensors/Sensor.js';
+import { publishStateToHA, syncAllDevicesToHA, handleHomeAssistantCommand, publishSensorStateToHA } from '../homeassistant/ha-discovery.js';
+import { callService, cachedHaStates } from '../homeassistant/ha-client.js';
 
 const MQTT_BROKER = process.env.MQTT_BROKER || 'mqtt://35.154.62.193:1883';
 const MQTT_STATUS_TOPIC = 'smart_home/rgbw/+/status';
@@ -16,12 +18,12 @@ export const connectMQTT = (io) => {
     connectTimeout: 30 * 1000
   });
 
-  mqttClient.on('connect', () => {
+  mqttClient.on('connect', async () => {
     console.log('📡 Connected to MQTT broker at:', MQTT_BROKER);
     setMqttClient(mqttClient);
     io.emit('mqtt_status', { status: 'Connected' });
 
-    // Subscribe to all smarthome device topics including specific PDF topics
+    // Subscribe to all smarthome device topics including specific HA proxy topics
     mqttClient.subscribe([
       'smarthome/+/+/status', 
       'smarthome/+/+/log', 
@@ -34,21 +36,61 @@ export const connectMQTT = (io) => {
       'touch-panel/+/switch/status',
       'touch-panel/+/ping/status',
       'smart_home/rgbw/+/status',
-      'smart_home/rgbw/+/debug'
+      'smart_home/rgbw/+/debug',
+      'smarthome/ha/+/command'
     ]);
+
+    // Dynamic boot sync to ensure all devices appear in Home Assistant
+    try {
+      await syncAllDevicesToHA();
+    } catch (syncErr) {
+      console.error('[MQTT BOOT] Failed to sync devices to HA registry:', syncErr.message);
+    }
+
+    // Dynamically subscribe to all configured custom sensor topics on boot
+    try {
+      const sensors = await Sensor.find();
+      if (sensors && sensors.length > 0) {
+        const topics = sensors.map(s => s.topic).filter(Boolean);
+        if (topics.length > 0) {
+          mqttClient.subscribe(topics, (err) => {
+            if (!err) {
+              console.log(`📡 Dynamically subscribed to ${topics.length} custom sensor topics on boot.`);
+            } else {
+              console.error(`❌ Failed to subscribe to custom sensor topics on boot:`, err.message);
+            }
+          });
+        }
+      }
+    } catch (sensorErr) {
+      console.error('❌ Failed to fetch custom sensors for boot subscription:', sensorErr.message);
+    }
   });
 
   mqttClient.on('message', async (topic, message) => {
     const payload = message.toString();
     const topicParts = topic.split('/');
     
+    // Intercept Home Assistant Proxy commands first and completely ignore any other HA proxy status/log messages to prevent loop feedback
+    if (topicParts[0] === 'smarthome' && topicParts[1] === 'ha') {
+      if (topicParts[3] === 'command') {
+        const entityId = topicParts[2];
+        try {
+          await handleHomeAssistantCommand(entityId, payload, io);
+        } catch (err) {
+          console.error(`[MQTT] Failed to process HA command for ${entityId}:`, err.message);
+        }
+      }
+      return;
+    }
+
     let deviceId = null;
     let data = null;
 
     try {
       data = JSON.parse(payload);
     } catch (e) {
-      return;
+      data = payload; // Fallback to raw string if it is not valid JSON
     }
 
     // Identify deviceId based on topic patterns
@@ -142,6 +184,13 @@ export const connectMQTT = (io) => {
             
             // Emit the fully updated device to frontend
             io.emit('device_state_update', updated);
+
+            // Sync updated states with Home Assistant
+            try {
+              await publishStateToHA(updated);
+            } catch (haErr) {
+              console.error(`[HA SYNC] Failed to sync touch-panel ${deviceId} to HA:`, haErr.message);
+            }
             return;
           }
         }
@@ -166,6 +215,11 @@ export const connectMQTT = (io) => {
         const updatedDevice = await Device.findOneAndUpdate({ deviceId }, updates, { returnDocument: 'after' });
         if (updatedDevice) {
           io.emit('device_state_update', updatedDevice);
+          try {
+            await publishStateToHA(updatedDevice);
+          } catch (haErr) {
+            console.error(`[HA SYNC] Failed to sync device ${deviceId} to HA:`, haErr.message);
+          }
         }
 
         // Handle sensor data for automation engine
@@ -178,7 +232,10 @@ export const connectMQTT = (io) => {
         if (Object.keys(sensorUpdates).length > 0) {
           updateSensorData(sensorUpdates);
           io.emit('sensor_data_update', getSensorData());
-          await evaluateAutomations(io);
+          // Only evaluate automations if the engine isn't currently executing/suppressing
+          if (!isEngineExecuting()) {
+            await evaluateAutomations(io);
+          }
         }
 
     } catch (e) {
@@ -190,18 +247,98 @@ export const connectMQTT = (io) => {
   try {
     const customSensor = await Sensor.findOne({ topic });
     if (customSensor) {
-      customSensor.value = data; // Store raw value (number, object, etc.)
-      customSensor.lastUpdated = new Date();
-      await customSensor.save();
+      // Robustly extract and parse sensor value (handling JSON objects, raw numbers, or key-value strings like value="612")
+      let sensorVal = data;
+      if (typeof data === 'string') {
+        // If data is a key-value pair string like 'value="612"' or 'value=27.84', extract the inner value
+        const match = data.match(/value=["']?([^"']+)["']?/i);
+        if (match) {
+          sensorVal = match[1];
+        }
+      } else if (typeof data === 'object' && data !== null) {
+        sensorVal = (data.value !== undefined) ? data.value : data;
+      }
+
+      // Try to convert to number if it's a numeric string
+      if (typeof sensorVal === 'string' && !isNaN(sensorVal) && sensorVal.trim() !== '') {
+        sensorVal = Number(sensorVal);
+      }
+
+      // --- THROTTLE & DELTA FILTER ---
+      // Prevent massive lag from sensors spamming (like presence or lux)
+      const now = Date.now();
+      if (!global.sensorThrottleMap) global.sensorThrottleMap = new Map();
+      const lastUpdate = global.sensorThrottleMap.get(topic) || { value: null, time: 0 };
       
-      // Update automation engine with custom sensor data
-      // Use the sensor name as the key for conditions
-      const sensorVal = (typeof data === 'object' && data.value !== undefined) ? data.value : data;
-      updateSensorData({ [customSensor.name]: sensorVal });
-      
-      io.emit('custom_sensor_update', customSensor);
-      io.emit('sensor_data_update', getSensorData());
-      await evaluateAutomations(io);
+      // If the value is identical to the last received value, ignore it (filters out presence '1' spam)
+      const isDuplicate = lastUpdate.value === sensorVal;
+      // If it's a rapidly fluctuating numeric sensor (like lux), limit updates to max 1 per second
+      const isThrottled = (now - lastUpdate.time) < 1000;
+
+      if (!isDuplicate && !isThrottled) {
+        global.sensorThrottleMap.set(topic, { value: sensorVal, time: now });
+
+        customSensor.value = sensorVal;
+        customSensor.lastUpdated = new Date();
+        await customSensor.save();
+        
+        // Update automation engine with custom sensor data
+        updateSensorData({ [customSensor.name]: sensorVal });
+        
+        io.emit('custom_sensor_update', customSensor);
+        io.emit('sensor_data_update', getSensorData());
+
+        // --- Custom Presence Music Scene ---
+        if (customSensor.name === 'Presence') {
+          const prevVal = lastUpdate.value;
+          const curVal = sensorVal;
+          const isNowZero = curVal === 0 || curVal === '0' || curVal === false || curVal === 'false';
+          const isNowOne = curVal === 1 || curVal === '1' || curVal === true || curVal === 'true';
+          const wasOne = prevVal === 1 || prevVal === '1' || prevVal === true || prevVal === 'true';
+          const wasZero = prevVal === 0 || prevVal === '0' || prevVal === false || prevVal === 'false' || prevVal === null;
+
+          if (isNowZero && wasOne) {
+            io.emit('toast_message', '🚶 No presence detected — pausing music');
+            // Pause ONLY speakers that are currently playing
+            if (cachedHaStates) {
+              if (!global._presencePausedSpeakers) global._presencePausedSpeakers = [];
+              global._presencePausedSpeakers = [];
+              for (const [id, state] of cachedHaStates.entries()) {
+                if (id.startsWith('media_player.') && state.mediaState === 'playing') {
+                  global._presencePausedSpeakers.push(id);
+                  callService('media_player', 'media_pause', { entity_id: id });
+                }
+              }
+            }
+          } else if (isNowOne && wasZero) {
+            // Resume ONLY the speakers we paused earlier
+            const pausedList = global._presencePausedSpeakers || [];
+            if (pausedList.length > 0) {
+              io.emit('toast_message', '🚶 Presence detected — resuming music');
+              for (const id of pausedList) {
+                callService('media_player', 'volume_set', { entity_id: id, volume_level: 0.1 });
+                callService('media_player', 'media_play', { entity_id: id });
+                // Gentle 3-step fade: 0.1 → 0.3 → 0.6 → original
+                setTimeout(() => callService('media_player', 'volume_set', { entity_id: id, volume_level: 0.3 }), 1500);
+                setTimeout(() => callService('media_player', 'volume_set', { entity_id: id, volume_level: 0.6 }), 3000);
+              }
+              global._presencePausedSpeakers = [];
+            }
+          }
+        }
+        // -----------------------------------
+
+        try {
+          await publishSensorStateToHA(customSensor);
+        } catch (haErr) {
+          console.error(`[HA SENSOR SYNC] Failed to sync custom sensor ${topic}:`, haErr.message);
+        }
+        
+        // Only evaluate automations if the engine isn't currently executing/suppressing
+        if (!isEngineExecuting()) {
+          await evaluateAutomations(io);
+        }
+      }
     }
   } catch (err) {
     console.error(`Error processing custom sensor for ${topic}`, err);

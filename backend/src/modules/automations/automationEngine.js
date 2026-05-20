@@ -1,13 +1,20 @@
-import Automation from '../models/Automation.js';
-import Device from '../models/Device.js';
-import { publishToLight, publishToTopic } from './mqttManager.js';
-import { getState, updateState } from './deviceState.js';
+import Automation from './Automation.js';
+import Device from '../devices/Device.js';
+import { publishToLight, publishToTopic } from '../../integrations/mqtt/mqttManager.js';
+import { getState, updateState } from '../devices/deviceState.js';
+import { callService } from '../../integrations/homeassistant/ha-client.js';
 
 /**
  * Automation Engine
  * 
  * Evaluates all enabled automation rules against current sensor data.
  * When conditions are met, executes the configured actions.
+ * 
+ * LOOP PREVENTION:
+ * 1. Execution lock – prevents re-evaluation while actions are running
+ * 2. Per-rule state tracking – only fires when condition transitions from false→true
+ * 3. Post-execution suppression – ignores MQTT echoes for a brief window after actions
+ * 4. Cooldown timer – existing per-rule cooldown from the schema
  */
 
 // Current sensor readings (updated by MQTT messages)
@@ -17,6 +24,12 @@ let sensorData = {
   lux: 0,
   motion: false,
 };
+
+// ── Loop Prevention State ──
+let _isExecuting = false;                    // True while actions are being executed
+let _suppressUntil = 0;                       // Timestamp: ignore evaluations until this time
+const SUPPRESSION_WINDOW_MS = 2000;           // 2-second window after execution to ignore echoes
+const _previousConditionState = new Map();    // ruleId → boolean (was condition met last time?)
 
 /**
  * Update sensor readings from MQTT or any other source.
@@ -31,6 +44,14 @@ export function updateSensorData(updates) {
  */
 export function getSensorData() {
   return { ...sensorData };
+}
+
+/**
+ * Check if the automation engine is currently executing actions.
+ * External callers (like mqtt.js) can use this to skip evaluation.
+ */
+export function isEngineExecuting() {
+  return _isExecuting || Date.now() < _suppressUntil;
 }
 
 /**
@@ -63,6 +84,25 @@ async function executeAction(action, io) {
 
 
 
+    if (targetDeviceId && targetDeviceId.includes('.')) {
+      console.log(`[AUTOMATION ENGINE] Routing HA action: ${command} on entity ${targetDeviceId}`);
+      const domain = targetDeviceId.split('.')[0];
+      let service = command;
+      let serviceData = params || {};
+      
+      if (domain === 'media_player') {
+        if (command === 'turn_off') service = 'media_pause';
+        else if (command === 'turn_on') service = 'media_play';
+      }
+
+      try {
+        await callService(domain, service, { entity_id: targetDeviceId, ...serviceData });
+      } catch (err) {
+        console.error(`[AUTOMATION ENGINE] Failed to route HA action for ${targetDeviceId}:`, err.message);
+      }
+      return;
+    }
+
     // Generic device handling
     const device = await Device.findOne({ deviceId: targetDeviceId });
     if (!device) {
@@ -91,7 +131,7 @@ async function executeAction(action, io) {
             on: (command !== 'turn_off'),
             ...(command === 'set_brightness' && { brightness: params.brightness }),
             ...(command === 'set_color' && { spectrumRgb: (params.color[0] << 16) | (params.color[1] << 8) | params.color[2] })
-          }, { new: true }),
+          }, { returnDocument: 'after' }),
           publishToTopic(topic, payload)
         ]);
 
@@ -170,12 +210,29 @@ async function executeAction(action, io) {
 /**
  * Evaluate all enabled automation rules and execute matching ones.
  * Called whenever sensor data changes.
+ * 
+ * LOOP PREVENTION: This function will bail out if:
+ *   - Actions are currently being executed (_isExecuting)
+ *   - We are within the post-execution suppression window
+ *   - A rule's conditions haven't transitioned (were already met before)
  */
 export async function evaluateAutomations(io) {
+  // ── Guard: don't re-enter while executing or during suppression window ──
+  if (_isExecuting) {
+    console.log('[AUTOMATION ENGINE] ⏸ Skipping evaluation – actions in progress');
+    return;
+  }
+  if (Date.now() < _suppressUntil) {
+    console.log('[AUTOMATION ENGINE] ⏸ Skipping evaluation – in post-execution suppression window');
+    return;
+  }
+
   try {
     const rules = await Automation.find({ enabled: true });
 
     for (const rule of rules) {
+      const ruleId = rule._id.toString();
+
       // Check cooldown
       if (rule.lastTriggered) {
         const elapsed = (Date.now() - rule.lastTriggered.getTime()) / 1000;
@@ -190,31 +247,53 @@ export async function evaluateAutomations(io) {
         ? results.every(Boolean)
         : results.some(Boolean);
 
-      if (conditionsMet) {
-        console.log(`[AUTOMATION ENGINE] ✅ Rule "${rule.name}" triggered!`);
+      // ── Edge-trigger: only fire on FALSE → TRUE transition ──
+      const wasPreviouslyMet = _previousConditionState.get(ruleId) || false;
+      _previousConditionState.set(ruleId, conditionsMet);
 
+      if (!conditionsMet) {
+        continue; // Conditions not met, nothing to do
+      }
+
+      if (wasPreviouslyMet) {
+        // Conditions were already met last time – don't re-fire (edge-trigger)
+        continue;
+      }
+
+      console.log(`[AUTOMATION ENGINE] ✅ Rule "${rule.name}" triggered!`);
+
+      // ── Lock execution to prevent recursive evaluation ──
+      _isExecuting = true;
+
+      try {
         // Execute all actions
         for (const action of rule.actions) {
           await executeAction(action, io);
         }
+      } finally {
+        // Unlock execution and start suppression window
+        _isExecuting = false;
+        _suppressUntil = Date.now() + SUPPRESSION_WINDOW_MS;
+      }
 
-        // Update trigger metadata
-        rule.lastTriggered = new Date();
-        rule.triggerCount += 1;
-        await rule.save();
+      // Update trigger metadata
+      rule.lastTriggered = new Date();
+      rule.triggerCount += 1;
+      await rule.save();
 
-        // Notify frontend about the trigger
-        if (io) {
-          io.emit('automation_triggered', {
-            ruleId: rule._id,
-            ruleName: rule.name,
-            triggeredAt: rule.lastTriggered,
-            triggerCount: rule.triggerCount,
-          });
-        }
+      // Notify frontend about the trigger
+      if (io) {
+        io.emit('automation_triggered', {
+          ruleId: rule._id,
+          ruleName: rule.name,
+          triggeredAt: rule.lastTriggered,
+          triggerCount: rule.triggerCount,
+        });
       }
     }
   } catch (err) {
     console.error('[AUTOMATION ENGINE] Error evaluating automations:', err);
+    // Always reset lock on error to prevent permanent deadlock
+    _isExecuting = false;
   }
 }

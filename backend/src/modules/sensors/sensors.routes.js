@@ -1,6 +1,7 @@
 import express from 'express';
-import Sensor from '../models/Sensor.js';
-import { getMqttClient } from '../services/mqttManager.js';
+import Sensor from './Sensor.js';
+import { getMqttClient } from '../../integrations/mqtt/mqttManager.js';
+import { publishSensorToHA, removeSensorFromHA } from '../../integrations/homeassistant/ha-discovery.js';
 
 const router = express.Router();
 
@@ -32,6 +33,12 @@ router.post('/', async (req, res) => {
       });
     }
 
+    try {
+      await publishSensorToHA(newSensor);
+    } catch (haErr) {
+      console.error('[HA SYNC] Failed to publish sensor discovery:', haErr);
+    }
+
     res.status(201).json(newSensor);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -48,6 +55,12 @@ router.delete('/:id', async (req, res) => {
     const mqttClient = getMqttClient();
     if (mqttClient && mqttClient.connected) {
       mqttClient.unsubscribe(sensor.topic);
+    }
+
+    try {
+      await removeSensorFromHA(sensor);
+    } catch (haErr) {
+      console.error('[HA SYNC] Failed to remove sensor discovery:', haErr);
     }
 
     await Sensor.findByIdAndDelete(req.params.id);

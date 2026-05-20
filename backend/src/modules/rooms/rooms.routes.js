@@ -1,6 +1,6 @@
 import express from 'express';
-import Room from '../models/Room.js';
-import Device from '../models/Device.js';
+import Room from './Room.js';
+import Device from '../devices/Device.js';
 
 const router = express.Router();
 
@@ -15,6 +15,8 @@ router.get('/', async (req, res) => {
   }
 });
 
+import { createHaArea } from '../../integrations/homeassistant/ha-client.js';
+
 // Add a new room
 router.post('/', async (req, res) => {
   const { name, icon } = req.body;
@@ -22,6 +24,11 @@ router.post('/', async (req, res) => {
 
   try {
     const newRoom = await room.save();
+    try {
+      createHaArea(name);
+    } catch (haErr) {
+      console.warn('Failed to sync new room to Home Assistant:', haErr.message);
+    }
     res.status(201).json(newRoom);
   } catch (err) {
     res.status(400).json({ message: err.message });

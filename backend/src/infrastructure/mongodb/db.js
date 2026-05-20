@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const connectDB = async () => {
-  const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/smarthome';
+  const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://mummanarakesh_db_user:[EMAIL_ADDRESS]/smarthome';
   try {
     const conn = await mongoose.connect(MONGO_URI);
     console.log(`✅ Connected to MongoDB at: ${conn.connection.host}`);
