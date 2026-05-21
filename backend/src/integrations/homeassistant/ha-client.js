@@ -57,7 +57,7 @@ export const connectHomeAssistant = (io) => {
         new Promise(resolve => sendMessage({ type: 'get_states' }, resolve))
       ]).then(([areaRes, deviceRes, entityRes, statesRes]) => {
         if (areaRes.result) areaRes.result.forEach(a => areaRegistry[a.area_id] = a.name);
-        if (deviceRes.result) deviceRes.result.forEach(d => deviceRegistry[d.id] = d.area_id);
+        if (deviceRes.result) deviceRes.result.forEach(d => deviceRegistry[d.id] = { area_id: d.area_id, manufacturer: d.manufacturer });
         if (entityRes.result) entityRes.result.forEach(e => {
           entityRegistry[e.entity_id] = { device_id: e.device_id, area_id: e.area_id, config_entry_id: e.config_entry_id, platform: e.platform };
         });
@@ -67,10 +67,20 @@ export const connectHomeAssistant = (io) => {
           statesRes.result.forEach(entity => {
             const ent = entityRegistry[entity.entity_id];
             const normalized = normalizeEntity(entity, ent);
+            
             let areaId = null;
+            let manufacturer = null;
             if (ent) {
-              areaId = ent.area_id || (ent.device_id ? deviceRegistry[ent.device_id] : null);
+              const dev = ent.device_id ? deviceRegistry[ent.device_id] : null;
+              areaId = ent.area_id || (dev ? dev.area_id : null);
+              manufacturer = dev ? dev.manufacturer : null;
             }
+
+            // Ignore devices that originated from our own system via MQTT Discovery to prevent duplication
+            if (manufacturer === 'Coral Innovations') {
+              return;
+            }
+
             normalized.room = areaId && areaRegistry[areaId] ? areaRegistry[areaId] : 'Home Assistant';
             
             // Only emit to UI if it's a supported capability
@@ -107,7 +117,7 @@ export const connectHomeAssistant = (io) => {
         });
       } else if (eventType === 'device_registry_updated') {
         sendMessage({ type: 'config/device_registry/list' }, (res) => {
-          if (res.result) res.result.forEach(d => deviceRegistry[d.id] = d.area_id);
+          if (res.result) res.result.forEach(d => deviceRegistry[d.id] = { area_id: d.area_id, manufacturer: d.manufacturer });
         });
       } else if (eventType === 'entity_registry_updated') {
         sendMessage({ type: 'config/entity_registry/list' }, (res) => {
@@ -124,10 +134,20 @@ export const connectHomeAssistant = (io) => {
 
         const ent = entityRegistry[entity.entity_id];
         const normalized = normalizeEntity(entity, ent);
+        
         let areaId = null;
+        let manufacturer = null;
         if (ent) {
-          areaId = ent.area_id || (ent.device_id ? deviceRegistry[ent.device_id] : null);
+          const dev = ent.device_id ? deviceRegistry[ent.device_id] : null;
+          areaId = ent.area_id || (dev ? dev.area_id : null);
+          manufacturer = dev ? dev.manufacturer : null;
         }
+
+        // Ignore devices that originated from our own system to prevent UI duplication
+        if (manufacturer === 'Coral Innovations') {
+          return;
+        }
+
         normalized.room = areaId && areaRegistry[areaId] ? areaRegistry[areaId] : 'Home Assistant';
         
         // Cache and emit the normalized entity directly to the React frontend via Socket.io

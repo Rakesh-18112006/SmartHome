@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Play, Pause, SkipBack, SkipForward, Volume2, Music, ListMusic, X, ChevronRight, Folder, Search, Disc3 } from 'lucide-react';
 
 const API_BASE = `http://${window.location.hostname}:3000`;
@@ -440,7 +441,7 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
       </div>
 
       {/* ── MEDIA BROWSER MODAL ── */}
-      {showMediaBrowser && (
+      {showMediaBrowser && createPortal(
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(15px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ width: '100%', maxWidth: '720px', height: '85vh', borderRadius: '24px', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#1a1a1e', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 24px 80px rgba(0,0,0,0.6)' }}>
             {/* Header */}
@@ -561,7 +562,8 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
               </>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

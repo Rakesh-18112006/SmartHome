@@ -141,20 +141,27 @@ export async function publishDeviceToHA(device) {
         };
         await publishToTopic(configTopic, configPayload);
       } else {
-        // Standard Switch/Plug
-        const configTopic = `homeassistant/switch/${entityId}/config`;
-        const configPayload = {
-          name,
-          unique_id: `ha_switch_${entityId}`,
-          command_topic: `smarthome/ha/${entityId}/command`,
-          state_topic: `smarthome/ha/${entityId}/status`,
-          payload_on: 'ON',
-          payload_off: 'OFF',
-          state_on: 'ON',
-          state_off: 'OFF',
-          device: haDeviceMetadata
-        };
-        await publishToTopic(configTopic, configPayload);
+        const isPureEnergyMonitor = deviceId.startsWith('B1E') || deviceId.startsWith('B3E') || device.type === '1phase' || device.type === '3phase';
+        if (!isPureEnergyMonitor) {
+          // Standard Switch/Plug
+          const configTopic = `homeassistant/switch/${entityId}/config`;
+          const configPayload = {
+            name,
+            unique_id: `ha_switch_${entityId}`,
+            command_topic: `smarthome/ha/${entityId}/command`,
+            state_topic: `smarthome/ha/${entityId}/status`,
+            payload_on: 'ON',
+            payload_off: 'OFF',
+            state_on: 'ON',
+            state_off: 'OFF',
+            device: haDeviceMetadata
+          };
+          await publishToTopic(configTopic, configPayload);
+        } else {
+          // Ensure any previously retained switch configuration is deleted from MQTT
+          const configTopic = `homeassistant/switch/${entityId}/config`;
+          await publishToTopic(configTopic, null);
+        }
       }
     }
 
@@ -221,9 +228,12 @@ export async function publishStateToHA(device) {
         };
         await publishToTopic(stateTopic, payload);
       } else {
-        // Switch/Plug
-        const payload = device.on ? 'ON' : 'OFF';
-        await publishToTopic(stateTopic, payload);
+        const isPureEnergyMonitor = deviceId.startsWith('B1E') || deviceId.startsWith('B3E') || device.type === '1phase' || device.type === '3phase';
+        if (!isPureEnergyMonitor) {
+          // Switch/Plug
+          const payload = device.on ? 'ON' : 'OFF';
+          await publishToTopic(stateTopic, payload);
+        }
       }
     }
   } catch (err) {
@@ -252,8 +262,12 @@ export async function removeDeviceFromHA(device) {
       if (device.type === 'light' || device.type === 'rgbw') component = 'light';
       else if (device.type === 'curtain') component = 'cover';
       else if (device.type === 'fan') component = 'fan';
-
-      await publishToTopic(`homeassistant/${component}/${deviceId}/config`, null);
+      
+      const isPureEnergyMonitor = deviceId.startsWith('B1E') || deviceId.startsWith('B3E') || device.type === '1phase' || device.type === '3phase';
+      
+      if (!isPureEnergyMonitor || component !== 'switch') {
+        await publishToTopic(`homeassistant/${component}/${deviceId}/config`, null);
+      }
     }
     console.log(`[HA DISCOVERY] Removed device from Home Assistant: ${device.title} (${deviceId})`);
   } catch (err) {

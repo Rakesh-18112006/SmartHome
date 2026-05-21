@@ -1,7 +1,8 @@
 import React from 'react';
 import { Power, Settings, Trash2 } from 'lucide-react';
 
-const DeviceCard = ({ title, status, on, icon, type, value, timerRemaining, onToggle, onAction }) => {
+const DeviceCard = ({ title, status, on, icon, type, value, timerRemaining, onToggle, onAction, deviceId = '' }) => {
+  const isPureEnergyMonitor = deviceId.startsWith('B1E') || deviceId.startsWith('B3E');
   return (
     <div 
       className={`device-card glass card-hover ${status ? 'online' : 'offline'}`}
@@ -12,7 +13,7 @@ const DeviceCard = ({ title, status, on, icon, type, value, timerRemaining, onTo
       }}
     >
       <div className="card-header">
-        <div className={`icon-box ${on ? 'power-on' : 'power-off'}`}>{icon}</div>
+        <div className={`icon-box ${on && !isPureEnergyMonitor ? 'power-on' : (isPureEnergyMonitor ? '' : 'power-off')}`}>{icon}</div>
         <div className="card-actions">
           <button className="action-btn" onClick={(e) => { e.stopPropagation(); onAction('edit'); }} title="Edit">
             <Settings size={14} />
@@ -31,11 +32,13 @@ const DeviceCard = ({ title, status, on, icon, type, value, timerRemaining, onTo
             {status ? 'Connected' : 'Offline'}
           </div>
         </div>
-        <div className="power-indicator">
-          <span className={`power-tag ${on ? 'active' : 'inactive'}`}>
-            {on ? 'ACTIVE' : 'STANDBY'}
-          </span>
-        </div>
+        {!isPureEnergyMonitor && (
+          <div className="power-indicator">
+            <span className={`power-tag ${on ? 'active' : 'inactive'}`}>
+              {on ? 'ACTIVE' : 'STANDBY'}
+            </span>
+          </div>
+        )}
       </div>
 
       {status && type === 'slider' && (
