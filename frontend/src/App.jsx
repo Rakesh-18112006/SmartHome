@@ -11,6 +11,7 @@ import ProvisioningModal from './components/ProvisioningModal';
 import SensorCard from './components/SensorCard';
 import AddSensorModal from './components/AddSensorModal';
 import MusicDeck from './components/MusicDeck';
+import Staircase from './components/Staircase';
 
 // Dynamic API Base URL for network access
 const API_BASE = `http://${window.location.hostname}:3000`;
@@ -1175,6 +1176,7 @@ const App = () => {
               {activeTab === 'scenes' && <Scenes socket={socket} rooms={rooms} allDevices={devices} sensors={sensors} onAddRoom={handleAddRoom} />}
               {activeTab === 'sensors' && renderSensorsSection()}
               {activeTab === 'devices' && renderDevicesView()}
+              {activeTab === 'staircase' && <Staircase socket={socket} mqttStatus={mqttStatus} />}
               {activeTab === 'settings' && renderSettingsView()}
             </>
           )}

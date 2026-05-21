@@ -7,6 +7,7 @@ import Sensor from '../../modules/sensors/Sensor.js';
 import { publishStateToHA, syncAllDevicesToHA, handleHomeAssistantCommand, publishSensorStateToHA } from '../homeassistant/ha-discovery.js';
 import { callService, cachedHaStates } from '../homeassistant/ha-client.js';
 import { handlePresenceChange } from '../../modules/audio/followMeAudio.js';
+import { handleTrigger } from '../../modules/staircase/staircaseService.js';
 
 const MQTT_BROKER = process.env.MQTT_BROKER || 'mqtt://35.154.62.193:1883';
 const MQTT_STATUS_TOPIC = 'smart_home/rgbw/+/status';
@@ -38,7 +39,8 @@ export const connectMQTT = (io) => {
       'touch-panel/+/ping/status',
       'smart_home/rgbw/+/status',
       'smart_home/rgbw/+/debug',
-      'smarthome/ha/+/command'
+      'smarthome/ha/+/command',
+      'smart_home/staircase/trigger'
     ]);
 
     // Dynamic boot sync to ensure all devices appear in Home Assistant
@@ -81,6 +83,13 @@ export const connectMQTT = (io) => {
         } catch (err) {
           console.error(`[MQTT] Failed to process HA command for ${entityId}:`, err.message);
         }
+      }
+      return;
+    } else if (topic === 'smart_home/staircase/trigger') {
+      let data = null;
+      try { data = JSON.parse(payload); } catch (e) { data = payload; }
+      if (data && data.trigger) {
+        handleTrigger(data.trigger);
       }
       return;
     }

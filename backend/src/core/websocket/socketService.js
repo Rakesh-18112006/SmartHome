@@ -4,8 +4,11 @@ import Automation from '../../modules/automations/Automation.js';
 import { getSensorData, updateSensorData, evaluateAutomations } from '../../modules/automations/automationEngine.js';
 import { callService, sendMessage, cachedHaStates } from '../../integrations/homeassistant/ha-client.js';
 import { publishStateToHA } from '../../integrations/homeassistant/ha-discovery.js';
+import { initStaircase } from '../../modules/staircase/staircaseService.js';
 
 export const initSocket = (io, mqttClient) => {
+  initStaircase(io);
+
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
 
