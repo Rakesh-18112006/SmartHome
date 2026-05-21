@@ -1,4 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import LandingPage from './components/LandingPage';
+import LoginPage from './components/LoginPage';
+
+// Custom fetch wrapper
+const fetchWithAuth = async (url, options = {}) => {
+  const token = localStorage.getItem('smarthome_token');
+  const headers = {
+    ...options.headers,
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+  };
+  const response = await fetch(url, { ...options, headers });
+  if (response.status === 401) {
+    localStorage.removeItem('smarthome_token');
+    window.location.href = '/login';
+  }
+  return response;
+};
+
+const ProtectedRoute = ({ children }) => {
+  const token = localStorage.getItem('smarthome_token');
+  if (!token) return <Navigate to="/login" replace />;
+  return children;
+};
+
 import io from 'socket.io-client';
 import { Power, Search, LayoutDashboard, Settings, Plus, Activity, Thermometer, Moon, Sun, Radio, Droplets, Footprints, Wind } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -21,7 +46,7 @@ const socket = io(API_BASE, {
   path: '/socket.io/'
 });
 
-const App = () => {
+const Dashboard = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [lightStatus, setLightStatus] = useState(false);
@@ -95,7 +120,7 @@ const App = () => {
 
   const fetchDevices = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/devices`);
+      const res = await fetchWithAuth(`${API_BASE}/api/devices`);
       const data = await res.json();
       // Preserve Home Assistant devices since they are only stored in memory via sockets
       setDevices(prev => {
@@ -109,7 +134,7 @@ const App = () => {
 
   const fetchRooms = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/rooms`);
+      const res = await fetchWithAuth(`${API_BASE}/api/rooms`);
       const data = await res.json();
       setRooms(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -120,7 +145,7 @@ const App = () => {
 
   const fetchSensors = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/sensors`);
+      const res = await fetchWithAuth(`${API_BASE}/api/sensors`);
       const data = await res.json();
       setSensors(Array.isArray(data) ? data : []);
     } catch (err) {
@@ -131,7 +156,7 @@ const App = () => {
 
   const handleAddSensor = async (sensorData) => {
     try {
-      const res = await fetch(`${API_BASE}/api/sensors`, {
+      const res = await fetchWithAuth(`${API_BASE}/api/sensors`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(sensorData)
@@ -145,7 +170,7 @@ const App = () => {
   const handleRemoveSensor = async (id) => {
     if (!window.confirm('Remove this sensor?')) return;
     try {
-      const res = await fetch(`${API_BASE}/api/sensors/${id}`, { method: 'DELETE' });
+      const res = await fetchWithAuth(`${API_BASE}/api/sensors/${id}`, { method: 'DELETE' });
       if (res.ok) fetchSensors();
     } catch (err) {
       console.error('Failed to remove sensor', err);
@@ -154,7 +179,7 @@ const App = () => {
 
   const handleAddRoom = async (roomData) => {
     try {
-      const res = await fetch(`${API_BASE}/api/rooms`, {
+      const res = await fetchWithAuth(`${API_BASE}/api/rooms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(roomData)
@@ -169,7 +194,7 @@ const App = () => {
 
   const handleConfigureDevice = async (deviceId, configData) => {
     try {
-      const res = await fetch(`${API_BASE}/api/devices/${deviceId}`, {
+      const res = await fetchWithAuth(`${API_BASE}/api/devices/${deviceId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(configData)
@@ -185,7 +210,7 @@ const App = () => {
 
   const handleRemoveDevice = async (deviceId) => {
     try {
-      const res = await fetch(`${API_BASE}/api/devices/${deviceId}`, {
+      const res = await fetchWithAuth(`${API_BASE}/api/devices/${deviceId}`, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -199,7 +224,7 @@ const App = () => {
   const handleRemoveRoom = async (roomName) => {
     if (!window.confirm(`Are you sure you want to remove the room "${roomName}"? Devices in this room will become Unassigned.`)) return;
     try {
-      const res = await fetch(`${API_BASE}/api/rooms/${roomName}`, {
+      const res = await fetchWithAuth(`${API_BASE}/api/rooms/${roomName}`, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -214,7 +239,7 @@ const App = () => {
 
   const handleAddDevice = async (deviceData) => {
     try {
-      const res = await fetch(`${API_BASE}/api/devices`, {
+      const res = await fetchWithAuth(`${API_BASE}/api/devices`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(deviceData)
@@ -1199,4 +1224,24 @@ const App = () => {
   );
 };
 
-export default App;
+
+const AppRouter = () => {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route 
+          path="/dashboard" 
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          } 
+        />
+      </Routes>
+    </BrowserRouter>
+  );
+};
+export default AppRouter;
+

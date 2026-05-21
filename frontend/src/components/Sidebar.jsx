@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, Layers, Radio, Cpu, Settings, PanelLeftClose, PanelLeftOpen, AlignEndHorizontal } from 'lucide-react';
+import { LayoutDashboard, Layers, Radio, Cpu, Settings, PanelLeftClose, PanelLeftOpen, AlignEndHorizontal, LogOut } from 'lucide-react';
 
 const Sidebar = ({ activeTab, setActiveTab }) => {
   const [collapsed, setCollapsed] = useState(false);
@@ -28,7 +28,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
           {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
         </button>
       </div>
-      <nav>
+      <nav className="flex-1 overflow-y-auto">
         {menuItems.map((item) => (
           <button
             key={item.id}
@@ -41,6 +41,19 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
           </button>
         ))}
       </nav>
+      <div className="mt-auto pt-4 border-t border-slate-700/50">
+        <button
+          className="nav-item text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors w-full"
+          onClick={() => {
+            localStorage.removeItem('smarthome_token');
+            window.location.href = '/login';
+          }}
+          title={collapsed ? 'Logout' : ''}
+        >
+          <span className="nav-icon"><LogOut size={20} /></span>
+          <span className="nav-label">Logout</span>
+        </button>
+      </div>
     </div>
   );
 };

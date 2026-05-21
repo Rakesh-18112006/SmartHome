@@ -158,7 +158,9 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
   };
 
   const openLibrary = () => {
-    const entity = defaultBrowseEntity;
+    // Find a valid Music Assistant player to use for browsing the shared library
+    const maPlayer = players.find(p => p.isMusicAssistant) || activePlayerRaw;
+    const entity = maPlayer?.deviceId || defaultBrowseEntity;
     setBrowseEntityId(entity);
     setMediaPath([{ title: 'Library', id: '', type: '' }]);
     setActiveTab('browse');

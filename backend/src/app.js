@@ -24,6 +24,9 @@ import googleSmartHomeRoutes from './integrations/google/googleSmartHome.routes.
 import sensorsRoutes from './modules/sensors/sensors.routes.js';
 import Sensor from './modules/sensors/Sensor.js';
 import { connectHomeAssistant } from './integrations/homeassistant/ha-client.js';
+import authRoutes from './modules/users/auth.routes.js';
+import authMiddleware from './core/middleware/auth.middleware.js';
+import User from './modules/users/User.js';
 
 
 dotenv.config();
@@ -50,12 +53,13 @@ app.use(express.urlencoded({ extended: true }));
 // });
 
 // Routes
+app.use('/api/auth', authRoutes);
 app.use('/', smarthomeRoutes);
-app.use('/api/automations', automationRoutes);
-app.use('/api/devices', devicesRoutes);
-app.use('/api/rooms', roomsRoutes);
+app.use('/api/automations', authMiddleware, automationRoutes);
+app.use('/api/devices', authMiddleware, devicesRoutes);
+app.use('/api/rooms', authMiddleware, roomsRoutes);
 app.use('/google', googleSmartHomeRoutes);
-app.use('/api/sensors', sensorsRoutes);
+app.use('/api/sensors', authMiddleware, sensorsRoutes);
 
 // Image proxy for Home Assistant authenticated media
 app.get('/api/ha/image', async (req, res) => {
@@ -100,6 +104,17 @@ app.get('/api/debug/media', (req, res) => {
 const startServer = async () => {
   // 1. Connect MongoDB
   await connectDB();
+
+  // 1.5 Seed Default User
+  const existingUser = await User.findOne({ username: 'admin' });
+  if (!existingUser) {
+    await User.create({
+      username: 'admin',
+      phone: '1234567890',
+      password: 'admin123'
+    });
+    console.log('🌱 Seeded default user: admin');
+  }
 
   // 2. Seed Default Rooms if needed
   const defaultRooms = [
