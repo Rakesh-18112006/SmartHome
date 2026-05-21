@@ -975,6 +975,7 @@ const App = () => {
                   {(Array.isArray(devices) ? devices : []).filter(d => d.room === currentRoom.name && d.isConfigured && d.type !== 'media_player').map(device => (
                     <DeviceCard
                       key={device.deviceId}
+                      deviceId={device.deviceId}
                       title={device.title}
                       status={device.isOnline}
                       on={device.on}
@@ -1015,6 +1016,7 @@ const App = () => {
         {devices.map(device => (
           <DeviceCard
             key={device.deviceId}
+            deviceId={device.deviceId}
             title={device.title}
             status={device.isOnline}
             on={device.on}
@@ -1153,6 +1155,7 @@ const App = () => {
                 {(Array.isArray(filteredDevices) ? filteredDevices : []).map(device => (
                   <DeviceCard
                     key={device.deviceId}
+                    deviceId={device.deviceId}
                     title={device.title}
                     status={device.isOnline}
                     on={device.on}
