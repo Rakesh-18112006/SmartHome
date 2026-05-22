@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home, Search, Library, Music2, Disc3, Mic2, ListMusic, Play, Pause, SkipBack, SkipForward, Volume2, ArrowLeft, Loader2 } from 'lucide-react';
+import { Home, Search, Library, Music2, Disc3, Mic2, ListMusic, Play, Pause, SkipBack, SkipForward, Volume2, ArrowLeft, Loader2, Folder } from 'lucide-react';
 import { socket, fetchWithAuth } from '../App';
 import '../music.css';
 
@@ -63,27 +63,8 @@ export default function MusicHome() {
 
     socket.on('ha_entity_state_change', handleStateChange);
     
-    // Fetch via REST API
-    fetchWithAuth(`${API_BASE}/api/devices`)
-      .then(res => res.json())
-      .then(data => {
-        const mapped = data.filter(d => d.type === 'media_player').map(d => ({
-          deviceId: d.deviceId,
-          title: d.name,
-          mediaState: d.state,
-          on: d.state !== 'off' && d.state !== 'unavailable',
-          volume: Math.round((d.attributes?.volume_level || 0) * 100),
-          mediaTitle: d.attributes?.media_title || '',
-          mediaArtist: d.attributes?.media_artist || '',
-          mediaAlbum: d.attributes?.media_album_name || '',
-          albumArt: proxyImg(d.attributes?.entity_picture),
-          mediaPosition: d.attributes?.media_position || 0,
-          mediaDuration: d.attributes?.media_duration || 0,
-          mediaPositionUpdatedAt: d.attributes?.media_position_updated_at,
-          isMusicAssistant: d.isMusicAssistant,
-        }));
-        setPlayers(mapped);
-      }).catch(console.error);
+    // Request initial states since we might have missed them if we navigated here
+    socket.emit('request_initial_states');
 
     return () => {
       socket.off('ha_entity_state_change', handleStateChange);
@@ -91,13 +72,27 @@ export default function MusicHome() {
   }, []);
 
   // Determine active player for the bottom bar and browsing
+  // Always prefer a Music Assistant player for browsing capability
   useEffect(() => {
-    if (players.length > 0 && !activePlayerId) {
-      const playing = players.find(p => p.mediaState === 'playing' && p.isMusicAssistant);
-      const maPlayer = players.find(p => p.isMusicAssistant);
-      setTimeout(() => {
-        setActivePlayerId(playing?.deviceId || maPlayer?.deviceId || players[0].deviceId);
-      }, 0);
+    if (players.length === 0) return;
+    
+    const currentPlayer = players.find(p => p.deviceId === activePlayerId);
+    const currentIsMA = currentPlayer?.isMusicAssistant;
+    
+    // If we already have a Music Assistant player selected, keep it
+    if (activePlayerId && currentIsMA) return;
+    
+    // Find the best Music Assistant player (prefer one that's playing)
+    const playingMA = players.find(p => p.mediaState === 'playing' && p.isMusicAssistant);
+    const anyMA = players.find(p => p.isMusicAssistant);
+    
+    if (playingMA) {
+      setActivePlayerId(playingMA.deviceId);
+    } else if (anyMA) {
+      setActivePlayerId(anyMA.deviceId);
+    } else if (!activePlayerId) {
+      // No MA players at all, fall back to first player
+      setActivePlayerId(players[0].deviceId);
     }
   }, [players, activePlayerId]);
 
@@ -126,17 +121,17 @@ export default function MusicHome() {
 
 
   // Browsing logic
-  const browseMedia = useCallback((entityId, type, id) => {
-    if (!socket || !entityId) return;
+  const browseMedia = useCallback((playerId, type, id) => {
+    if (!socket || !playerId) return;
     setIsBrowsing(true);
-    const payload = { entity_id: entityId };
-    if (type) payload.media_content_type = type;
-    if (id) payload.media_content_id = id;
-    
-    socket.emit('ha_browse_media', payload, (response) => {
+    socket.emit('ha_browse_media', { 
+      entity_id: playerId,
+      media_content_type: type,
+      media_content_id: id
+    }, (response) => {
       setIsBrowsing(false);
-      if (response && response.result) {
-        setMediaItems(response.result.children || []);
+      if (response && response.result && response.result.children) {
+        setMediaItems(response.result.children.filter(i => i.title !== '..'));
       } else {
         setMediaItems([]);
       }
@@ -153,25 +148,14 @@ export default function MusicHome() {
       browseMedia(activePlayerId, '', '');
     } else {
       setIsBrowsing(true);
-      // Fetch root library to reliably locate the tab's exact ID for ANY media player
-      socket.emit('ha_browse_media', { entity_id: activePlayerId }, (response) => {
-        if (response && response.result && response.result.children) {
-          const target = response.result.children.find(c => c.title.toLowerCase() === tab);
-          if (target) {
-            setMediaPath([
-              { title: 'Library', id: '', type: '' }, 
-              { title: target.title, id: target.media_content_id, type: target.media_content_type }
-            ]);
-            browseMedia(activePlayerId, target.media_content_type, target.media_content_id);
-          } else {
-            setIsBrowsing(false);
-            setMediaItems([]);
-          }
-        } else {
-          setIsBrowsing(false);
-          setMediaItems([]);
-        }
-      });
+      const targetId = tab;
+      const title = tab.charAt(0).toUpperCase() + tab.slice(1);
+      
+      setMediaPath([
+        { title: 'Library', id: '', type: '' },
+        { title: title, id: targetId, type: 'music_assistant' }
+      ]);
+      browseMedia(activePlayerId, 'music_assistant', targetId);
     }
   }, [activePlayerId, browseMedia]);
 
@@ -187,7 +171,7 @@ export default function MusicHome() {
     
     setIsBrowsing(true);
     searchTimeout.current = setTimeout(() => {
-      socket.emit('ha_search_media', { entity_id: activePlayerId, query: query.trim() }, (response) => {
+      socket.emit('mass_search_media', { query: query.trim() }, (response) => {
         setIsBrowsing(false);
         if (response && response.result && response.result.children) {
           setMediaItems(response.result.children);
@@ -212,8 +196,7 @@ export default function MusicHome() {
       setMediaPath(prev => [...prev, { title: item.title, id: item.media_content_id, type: item.media_content_type }]);
       browseMedia(activePlayerId, item.media_content_type, item.media_content_id);
     } else if (item.can_play) {
-      socket.emit('ha_command', {
-        domain: 'media_player',
+      socket.emit('mass_command', {
         service: 'play_media',
         entityId: activePlayerId,
         serviceData: {
@@ -241,8 +224,7 @@ export default function MusicHome() {
 
   const sendCommand = (service, serviceData = {}) => {
     if (!activePlayerId) return;
-    socket.emit('ha_command', {
-      domain: 'media_player',
+    socket.emit('mass_command', {
       service,
       entityId: activePlayerId,
       serviceData
@@ -330,9 +312,13 @@ export default function MusicHome() {
                       {item.thumbnail ? (
                         <img src={proxyImg(item.thumbnail)} alt={item.title} loading="lazy" />
                       ) : (
-                        item.media_class === 'artist' ? <Mic2 size={28} color="var(--text-muted)" /> : 
-                        item.media_class === 'track' ? <Music2 size={28} color="var(--text-muted)" /> : 
-                        <Disc3 size={28} color="var(--text-muted)" />
+                        <div className={`music-card-fallback-icon ${item.media_class || 'directory'}`}>
+                          {item.media_class === 'artist' ? <Mic2 size={36} /> : 
+                           item.media_class === 'track' ? <Music2 size={36} /> : 
+                           item.media_class === 'album' ? <Disc3 size={36} /> : 
+                           item.media_class === 'playlist' ? <ListMusic size={36} /> : 
+                           <Folder size={36} />}
+                        </div>
                       )}
                       {item.can_play && (
                         <button className="music-card-play" onClick={(e) => { e.stopPropagation(); handleMediaClick(item); }}>
@@ -344,6 +330,11 @@ export default function MusicHome() {
                       <div className="music-card-title">{item.title}</div>
                       <div className="music-card-subtitle" style={{ textTransform: 'capitalize' }}>
                         {item.media_class === 'directory' ? 'Folder' : item.media_class}
+                        {typeof item.provider === 'string' && item.provider !== 'builtin' && item.provider !== 'library' && (
+                          <span style={{ marginLeft: '6px', fontSize: '0.75rem', opacity: 0.8, color: 'var(--primary)' }}>
+                            • {item.provider.split('--')[0].replace('ytmusic', 'YT Music').replace('apple_music', 'Apple Music')}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

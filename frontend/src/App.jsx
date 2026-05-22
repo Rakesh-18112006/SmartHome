@@ -280,6 +280,9 @@ const Dashboard = () => {
     // REMOVED 5-second polling loop which caused massive UI lag and slider jumping.
     // We now rely entirely on the fast WebSocket events for real-time updates!
     
+    // Ask the server to send the current state to avoid race conditions on mount
+    socket.emit('request_initial_states');
+    
     socket.on('mqtt_status', (data) => setMqttStatus(data.status));
     
     socket.on('device_state_update', (updatedDevice) => {

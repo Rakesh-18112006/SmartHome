@@ -1,0 +1,675 @@
+{
+  "1": {
+    "message_id": "1",
+    "result": {
+      "authenticated": true,
+      "user": {
+        "user_id": "HnLRCy-PqzXofY_sdOJYtYjkMXzWHFpI9WnPMw2Wjg0",
+        "username": "coralinnovations",
+        "role": "admin",
+        "enabled": true,
+        "created_at": "2026-05-18T12:12:24.317091+00:00",
+        "display_name": "CoralInnovations",
+        "avatar_url": null,
+        "preferences": {
+          "globalSearch": "hello adele",
+          "allPlayersExpanded": true,
+          "activePlayerId": "94270b1d-6de0-446b-a92f-b0a5f87e1950",
+          "recentlySelectedPlayerIds": [
+            "94270b1d-6de0-446b-a92f-b0a5f87e1950",
+            "4155ca0e-cfbc-8c95-de97-d3ad7ca6e1f7",
+            "5c318b00-c797-9baf-b453-e05e10e9b847"
+          ],
+          "globalSearchType": "track"
+        },
+        "provider_filter": [],
+        "player_filter": []
+      }
+    },
+    "partial": false
+  },
+  "2": {
+    "message_id": "2",
+    "result": [
+      {
+        "player_id": "up0820d6232c25",
+        "provider": "universal_player",
+        "type": "player",
+        "name": "kasimalla’s MacBook Air",
+        "available": false,
+        "device_info": {
+          "model": "Mac (Mac14,2)",
+          "manufacturer": "Apple",
+          "software_version": null,
+          "model_id": null,
+          "manufacturer_id": null,
+          "identifiers": {
+            "mac_address": "0A:20:D6:23:2C:25",
+            "airplay_id": "ap0a20d6232c25",
+            "ip_address": "192.168.0.54"
+          },
+          "mac_address": "0A:20:D6:23:2C:25",
+          "ip_address": "192.168.0.54"
+        },
+        "supported_features": [],
+        "playback_state": "idle",
+        "elapsed_time": null,
+        "elapsed_time_last_updated": null,
+        "powered": true,
+        "volume_level": null,
+        "volume_muted": null,
+        "group_members": [],
+        "static_group_members": [],
+        "can_group_with": [],
+        "synced_to": null,
+        "active_sound_mode": null,
+        "sound_mode_list": [],
+        "options": [],
+        "active_source": "up0820d6232c25",
+        "source_list": [
+          {
+            "id": "up0820d6232c25",
+            "name": "Music Assistant Queue",
+            "passive": false,
+            "can_play_pause": true,
+            "can_seek": true,
+            "can_next_previous": true
+          }
+        ],
+        "active_group": null,
+        "current_media": null,
+        "enabled": true,
+        "hide_in_ui": false,
+        "expose_to_ha": true,
+        "icon": "mdi-speaker",
+        "group_volume": 0,
+        "group_volume_muted": null,
+        "extra_attributes": {},
+        "power_control": "none",
+        "volume_control": "none",
+        "mute_control": "none",
+        "output_protocols": [
+          {
+            "output_protocol_id": "ap0a20d6232c25",
+            "name": "Airplay",
+            "protocol_domain": "airplay",
+            "is_native": false,
+            "priority": 10,
+            "available": false
+          },
+          {
+            "output_protocol_id": "spb_0a20d6232c25",
+            "name": "Sendspin",
+            "protocol_domain": "sendspin",
+            "is_native": false,
+            "priority": 40,
+            "available": false
+          }
+        ],
+        "active_output_protocol": null,
+        "needs_setup": false,
+        "display_name": "kasimalla’s MacBook Air",
+        "state": "idle",
+        "group_childs": [],
+        "extra_data": {},
+        "hide_player_in_ui": [
+          "when_unavailable",
+          "when_synced",
+          "when_group_active"
+        ]
+      },
+      {
+        "player_id": "up2472055ad504",
+        "provider": "universal_player",
+        "type": "player",
+        "name": "Rakesh’s MacBook Air",
+        "available": true,
+        "device_info": {
+          "model": "Mac (Mac16,12)",
+          "manufacturer": "Apple",
+          "software_version": null,
+          "model_id": null,
+          "manufacturer_id": null,
+          "identifiers": {
+            "mac_address": "26:72:05:5A:D5:04",
+            "airplay_id": "ap2672055ad504",
+            "ip_address": "192.168.0.52"
+          },
+          "mac_address": "26:72:05:5A:D5:04",
+          "ip_address": "192.168.0.52"
+        },
+        "supported_features": [
+          "volume_mute",
+          "volume_set",
+          "set_members"
+        ],
+        "playback_state": "idle",
+        "elapsed_time": null,
+        "elapsed_time_last_updated": null,
+        "powered": true,
+        "volume_level": 20,
+        "volume_muted": null,
+        "group_members": [],
+        "static_group_members": [],
+        "can_group_with": [
+          "ma_kvn9e576d8",
+          "ma_w7dsges2x1",
+          "ap706871913f40"
+        ],
+        "synced_to": null,
+        "active_sound_mode": null,
+        "sound_mode_list": [],
+        "options": [],
+        "active_source": "up2472055ad504",
+        "source_list": [
+          {
+            "id": "up2472055ad504",
+            "name": "Music Assistant Queue",
+            "passive": false,
+            "can_play_pause": true,
+            "can_seek": true,
+            "can_next_previous": true
+          }
+        ],
+        "active_group": null,
+        "current_media": {
+          "uri": "library://track/68",
+          "media_type": "track",
+          "title": "Bhoochadae",
+          "artist": "Rahul Nambiar/Naveen Madhav/Shreya Ghoshal/Ramya",
+          "album": "Race Gurram (Original Motion Picture Soundtrack)",
+          "image_url": "http://192.168.0.139:8095/imageproxy?provider=apple_music--GHxR8zC7&size=500&fmt=jpeg&path=https%253A%252F%252Fis1-ssl.mzstatic.com%252Fimage%252Fthumb%252FMusic221%252Fv4%252Faa%252Fda%252F0d%252Faada0de7-7c3f-0001-f75d-51f9cb3d9b19%252F3617229186483.jpg%252F1000x1000bb.jpg",
+          "duration": 260,
+          "source_id": "up2472055ad504",
+          "queue_item_id": "060ba92d525a4540b02a1b4a4681afef",
+          "custom_data": null,
+          "elapsed_time": 0,
+          "elapsed_time_last_updated": 1779193523.8998117
+        },
+        "enabled": true,
+        "hide_in_ui": false,
+        "expose_to_ha": true,
+        "icon": "mdi-speaker",
+        "group_volume": 20,
+        "group_volume_muted": null,
+        "extra_attributes": {},
+        "power_control": "none",
+        "volume_control": "ap2672055ad504",
+        "mute_control": "ap2672055ad504",
+        "output_protocols": [
+          {
+            "output_protocol_id": "ap2672055ad504",
+            "name": "AirPlay",
+            "protocol_domain": "airplay",
+            "is_native": false,
+            "priority": 10,
+            "available": true
+          },
+          {
+            "output_protocol_id": "spb_2672055ad504",
+            "name": "Sendspin",
+            "protocol_domain": "sendspin",
+            "is_native": false,
+            "priority": 40,
+            "available": true
+          }
+        ],
+        "active_output_protocol": null,
+        "needs_setup": false,
+        "display_name": "Rakesh’s MacBook Air",
+        "state": "idle",
+        "group_childs": [],
+        "extra_data": {},
+        "hide_player_in_ui": [
+          "when_unavailable",
+          "when_synced",
+          "when_group_active"
+        ]
+      },
+      {
+        "player_id": "ap706871913f40",
+        "provider": "airplay",
+        "type": "player",
+        "name": "BHARAT SMART SERVICES",
+        "available": true,
+        "device_info": {
+          "model": "Apple TV Gen3",
+          "manufacturer": "Apple",
+          "software_version": null,
+          "model_id": null,
+          "manufacturer_id": null,
+          "identifiers": {
+            "mac_address": "70:68:71:91:3F:40",
+            "ip_address": "192.168.0.32",
+            "airplay_id": "ap706871913f40"
+          },
+          "mac_address": "70:68:71:91:3F:40",
+          "ip_address": "192.168.0.32"
+        },
+        "supported_features": [
+          "play_media",
+          "volume_set",
+          "set_members",
+          "volume_mute",
+          "pause",
+          "multi_device_dsp"
+        ],
+        "playback_state": "idle",
+        "elapsed_time": null,
+        "elapsed_time_last_updated": null,
+        "powered": true,
+        "volume_level": 80,
+        "volume_muted": null,
+        "group_members": [],
+        "static_group_members": [],
+        "can_group_with": [
+          "ma_kvn9e576d8",
+          "up2472055ad504",
+          "ma_w7dsges2x1"
+        ],
+        "synced_to": null,
+        "active_sound_mode": null,
+        "sound_mode_list": [],
+        "options": [],
+        "active_source": "ap706871913f40",
+        "source_list": [
+          {
+            "id": "ap706871913f40",
+            "name": "Music Assistant Queue",
+            "passive": false,
+            "can_play_pause": true,
+            "can_seek": true,
+            "can_next_previous": true
+          }
+        ],
+        "active_group": null,
+        "current_media": null,
+        "enabled": true,
+        "hide_in_ui": false,
+        "expose_to_ha": true,
+        "icon": "mdi-speaker",
+        "group_volume": 80,
+        "group_volume_muted": null,
+        "extra_attributes": {},
+        "power_control": "none",
+        "volume_control": "native",
+        "mute_control": "native",
+        "output_protocols": [
+          {
+            "output_protocol_id": "native",
+            "name": "AirPlay",
+            "protocol_domain": "airplay",
+            "is_native": true,
+            "priority": 0,
+            "available": true
+          },
+          {
+            "output_protocol_id": "spb_706871913f40",
+            "name": "Sendspin",
+            "protocol_domain": "sendspin",
+            "is_native": false,
+            "priority": 40,
+            "available": true
+          },
+          {
+            "output_protocol_id": "uuid:WonderCast70:68:71:91:3f:40",
+            "name": "Dlna",
+            "protocol_domain": "dlna",
+            "is_native": false,
+            "priority": 50,
+            "available": false
+          }
+        ],
+        "active_output_protocol": null,
+        "needs_setup": false,
+        "display_name": "BHARAT SMART SERVICES",
+        "state": "idle",
+        "group_childs": [],
+        "extra_data": {},
+        "hide_player_in_ui": [
+          "when_unavailable",
+          "when_synced",
+          "when_group_active"
+        ]
+      },
+      {
+        "player_id": "ma_w7dsges2x1",
+        "provider": "sendspin",
+        "type": "player",
+        "name": "Web (Chrome on Windows)",
+        "available": true,
+        "device_info": {
+          "model": "Web Browser",
+          "manufacturer": "Google Inc.",
+          "software_version": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+          "model_id": null,
+          "manufacturer_id": null,
+          "identifiers": {},
+          "mac_address": null,
+          "ip_address": null
+        },
+        "supported_features": [
+          "play_media",
+          "volume_set",
+          "set_members",
+          "volume_mute",
+          "multi_device_dsp"
+        ],
+        "playback_state": "idle",
+        "elapsed_time": null,
+        "elapsed_time_last_updated": null,
+        "powered": true,
+        "volume_level": 100,
+        "volume_muted": false,
+        "group_members": [],
+        "static_group_members": [],
+        "can_group_with": [
+          "ma_kvn9e576d8",
+          "up2472055ad504",
+          "ap706871913f40"
+        ],
+        "synced_to": null,
+        "active_sound_mode": null,
+        "sound_mode_list": [],
+        "options": [],
+        "active_source": "ma_w7dsges2x1",
+        "source_list": [
+          {
+            "id": "ma_w7dsges2x1",
+            "name": "Music Assistant Queue",
+            "passive": false,
+            "can_play_pause": true,
+            "can_seek": true,
+            "can_next_previous": true
+          }
+        ],
+        "active_group": null,
+        "current_media": null,
+        "enabled": true,
+        "hide_in_ui": true,
+        "expose_to_ha": false,
+        "icon": "mdi-speaker",
+        "group_volume": 100,
+        "group_volume_muted": false,
+        "extra_attributes": {},
+        "power_control": "none",
+        "volume_control": "native",
+        "mute_control": "native",
+        "output_protocols": [
+          {
+            "output_protocol_id": "native",
+            "name": "Sendspin",
+            "protocol_domain": "sendspin",
+            "is_native": true,
+            "priority": 0,
+            "available": true
+          }
+        ],
+        "active_output_protocol": null,
+        "needs_setup": false,
+        "display_name": "Web (Chrome on Windows)",
+        "state": "idle",
+        "group_childs": [],
+        "extra_data": {},
+        "hide_player_in_ui": [
+          "always"
+        ]
+      },
+      {
+        "player_id": "ma_kvn9e576d8",
+        "provider": "sendspin",
+        "type": "player",
+        "name": "Web (Chrome on Mac)",
+        "available": true,
+        "device_info": {
+          "model": "Web Browser",
+          "manufacturer": "Google Inc.",
+          "software_version": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+          "model_id": null,
+          "manufacturer_id": null,
+          "identifiers": {},
+          "mac_address": null,
+          "ip_address": null
+        },
+        "supported_features": [
+          "play_media",
+          "volume_set",
+          "set_members",
+          "volume_mute",
+          "multi_device_dsp"
+        ],
+        "playback_state": "idle",
+        "elapsed_time": null,
+        "elapsed_time_last_updated": null,
+        "powered": true,
+        "volume_level": 100,
+        "volume_muted": false,
+        "group_members": [],
+        "static_group_members": [],
+        "can_group_with": [
+          "ap706871913f40",
+          "up2472055ad504",
+          "ma_w7dsges2x1"
+        ],
+        "synced_to": null,
+        "active_sound_mode": null,
+        "sound_mode_list": [],
+        "options": [],
+        "active_source": "ma_kvn9e576d8",
+        "source_list": [
+          {
+            "id": "ma_kvn9e576d8",
+            "name": "Music Assistant Queue",
+            "passive": false,
+            "can_play_pause": true,
+            "can_seek": true,
+            "can_next_previous": true
+          }
+        ],
+        "active_group": null,
+        "current_media": null,
+        "enabled": true,
+        "hide_in_ui": true,
+        "expose_to_ha": false,
+        "icon": "mdi-speaker",
+        "group_volume": 100,
+        "group_volume_muted": false,
+        "extra_attributes": {},
+        "power_control": "none",
+        "volume_control": "native",
+        "mute_control": "native",
+        "output_protocols": [
+          {
+            "output_protocol_id": "native",
+            "name": "Sendspin",
+            "protocol_domain": "sendspin",
+            "is_native": true,
+            "priority": 0,
+            "available": true
+          }
+        ],
+        "active_output_protocol": null,
+        "needs_setup": false,
+        "display_name": "Web (Chrome on Mac)",
+        "state": "idle",
+        "group_childs": [],
+        "extra_data": {},
+        "hide_player_in_ui": [
+          "always"
+        ]
+      }
+    ],
+    "partial": false
+  },
+  "3": {
+    "message_id": "3",
+    "result": [
+      {
+        "item_id": "root",
+        "provider": "library",
+        "name": "..",
+        "version": "",
+        "sort_name": "",
+        "uri": "library://folder/root",
+        "external_ids": [],
+        "is_playable": false,
+        "translation_key": null,
+        "media_type": "folder",
+        "path": "root",
+        "image": null
+      },
+      {
+        "item_id": "artists",
+        "provider": "ytmusic--wgRaom8t",
+        "name": "",
+        "version": "",
+        "sort_name": "",
+        "uri": "ytmusic--wgRaom8t://folder/artists",
+        "external_ids": [],
+        "is_playable": true,
+        "translation_key": "artists",
+        "media_type": "folder",
+        "path": "ytmusic--wgRaom8t://artists",
+        "image": null
+      },
+      {
+        "item_id": "albums",
+        "provider": "ytmusic--wgRaom8t",
+        "name": "",
+        "version": "",
+        "sort_name": "",
+        "uri": "ytmusic--wgRaom8t://folder/albums",
+        "external_ids": [],
+        "is_playable": true,
+        "translation_key": "albums",
+        "media_type": "folder",
+        "path": "ytmusic--wgRaom8t://albums",
+        "image": null
+      },
+      {
+        "item_id": "tracks",
+        "provider": "ytmusic",
+        "name": "",
+        "version": "",
+        "sort_name": "",
+        "uri": "ytmusic://folder/tracks",
+        "external_ids": [],
+        "is_playable": true,
+        "translation_key": "tracks",
+        "media_type": "folder",
+        "path": "ytmusic--wgRaom8t://tracks",
+        "image": null
+      },
+      {
+        "item_id": "playlists",
+        "provider": "ytmusic--wgRaom8t",
+        "name": "",
+        "version": "",
+        "sort_name": "",
+        "uri": "ytmusic--wgRaom8t://folder/playlists",
+        "external_ids": [],
+        "is_playable": true,
+        "translation_key": "playlists",
+        "media_type": "folder",
+        "path": "ytmusic--wgRaom8t://playlists",
+        "image": null
+      },
+      {
+        "item_id": "podcasts",
+        "provider": "ytmusic--wgRaom8t",
+        "name": "",
+        "version": "",
+        "sort_name": "",
+        "uri": "ytmusic--wgRaom8t://folder/podcasts",
+        "external_ids": [],
+        "is_playable": false,
+        "translation_key": "podcasts",
+        "media_type": "folder",
+        "path": "ytmusic--wgRaom8t://podcasts",
+        "image": null
+      },
+      {
+        "item_id": "recommendations",
+        "provider": "ytmusic--wgRaom8t",
+        "name": "",
+        "version": "",
+        "sort_name": "",
+        "uri": "ytmusic--wgRaom8t://folder/recommendations",
+        "external_ids": [],
+        "is_playable": false,
+        "translation_key": "recommendations",
+        "media_type": "folder",
+        "path": "ytmusic--wgRaom8t://recommendations",
+        "image": null
+      }
+    ],
+    "partial": false
+  },
+  "4": {
+    "message_id": "4",
+    "result": [
+      {
+        "item_id": "root",
+        "provider": "library",
+        "name": "..",
+        "version": "",
+        "sort_name": "",
+        "uri": "library://folder/root",
+        "external_ids": [],
+        "is_playable": false,
+        "translation_key": null,
+        "media_type": "folder",
+        "path": "root",
+        "image": null
+      },
+      {
+        "item_id": "tracks",
+        "provider": "builtin",
+        "name": "",
+        "version": "",
+        "sort_name": "",
+        "uri": "builtin://folder/tracks",
+        "external_ids": [],
+        "is_playable": true,
+        "translation_key": "tracks",
+        "media_type": "folder",
+        "path": "builtin://tracks",
+        "image": null
+      },
+      {
+        "item_id": "playlists",
+        "provider": "builtin",
+        "name": "",
+        "version": "",
+        "sort_name": "",
+        "uri": "builtin://folder/playlists",
+        "external_ids": [],
+        "is_playable": true,
+        "translation_key": "playlists",
+        "media_type": "folder",
+        "path": "builtin://playlists",
+        "image": null
+      },
+      {
+        "item_id": "radios",
+        "provider": "builtin",
+        "name": "",
+        "version": "",
+        "sort_name": "",
+        "uri": "builtin://folder/radios",
+        "external_ids": [],
+        "is_playable": false,
+        "translation_key": "radios",
+        "media_type": "folder",
+        "path": "builtin://radios",
+        "image": null
+      }
+    ],
+    "partial": false
+  },
+  "5": {
+    "message_id": "5",
+    "error_code": 12,
+    "details": "Invalid command: players/queue"
+  }
+}
