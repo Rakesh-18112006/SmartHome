@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Search, Library, Music2, Disc3, Mic2, ListMusic, Play, Pause, SkipBack, SkipForward, Volume2, ArrowLeft, Loader2, Folder } from 'lucide-react';
 import { socket, fetchWithAuth } from '../App';
 import '../music.css';
@@ -21,6 +21,8 @@ function formatTime(seconds) {
 
 export default function MusicHome() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const passedPlayerId = location.state?.playerId || null;
   const [activeTab, setActiveTab] = useState('library'); // library, artists, albums, tracks, playlists
   const [mediaItems, setMediaItems] = useState([]);
   const [mediaPath, setMediaPath] = useState([]);
@@ -29,6 +31,7 @@ export default function MusicHome() {
   
   const [players, setPlayers] = useState([]);
   const [activePlayerId, setActivePlayerId] = useState(null);
+  const passedPlayerUsed = useRef(false);
 
   // Setup Socket listener to sync media players (same logic as App.jsx)
   useEffect(() => {
@@ -71,30 +74,70 @@ export default function MusicHome() {
     };
   }, []);
 
-  // Determine active player for the bottom bar and browsing
-  // Always prefer a Music Assistant player for browsing capability
+  // Determine active player for the bottom bar (controls, now-playing)
+  // Always prefer the Music Assistant version of a player since it has now-playing info
   useEffect(() => {
     if (players.length === 0) return;
     
+    // If a player ID was passed from the dashboard and we haven't used it yet
+    if (passedPlayerId && !passedPlayerUsed.current) {
+      // First: try to find the MA equivalent of the passed player (preferred — has now-playing info)
+      const passedPlayer = players.find(p => p.deviceId === passedPlayerId);
+      const baseId = passedPlayerId.replace('media_player.', '');
+      const passedName = passedPlayer?.title?.toLowerCase() || '';
+      
+      const maEquiv = players.find(p =>
+        p.isMusicAssistant && p.deviceId !== passedPlayerId && (
+          p.deviceId.includes(baseId) || 
+          (passedName && p.title && p.title.toLowerCase().includes(passedName)) ||
+          (passedName && p.title && passedName.includes(p.title.toLowerCase()))
+        )
+      );
+      
+      if (maEquiv) {
+        setActivePlayerId(maEquiv.deviceId);
+        passedPlayerUsed.current = true;
+        return;
+      }
+      
+      // Fallback: if the passed player itself is MA or no MA equiv found, use it directly
+      if (passedPlayer) {
+        setActivePlayerId(passedPlayerId);
+        passedPlayerUsed.current = true;
+        return;
+      }
+    }
+    
+    // If we already have an MA player selected and it's still in the list, keep it
     const currentPlayer = players.find(p => p.deviceId === activePlayerId);
-    const currentIsMA = currentPlayer?.isMusicAssistant;
+    if (activePlayerId && currentPlayer?.isMusicAssistant) return;
     
-    // If we already have a Music Assistant player selected, keep it
-    if (activePlayerId && currentIsMA) return;
+    // If we have a non-MA player selected, check if an MA player is now available to upgrade to
     
-    // Find the best Music Assistant player (prefer one that's playing)
+    // Auto-select: prefer MA player that's playing, then any MA, then any playing, then first
     const playingMA = players.find(p => p.mediaState === 'playing' && p.isMusicAssistant);
     const anyMA = players.find(p => p.isMusicAssistant);
+    const anyPlaying = players.find(p => p.mediaState === 'playing');
     
     if (playingMA) {
       setActivePlayerId(playingMA.deviceId);
     } else if (anyMA) {
       setActivePlayerId(anyMA.deviceId);
+    } else if (anyPlaying) {
+      setActivePlayerId(anyPlaying.deviceId);
     } else if (!activePlayerId) {
-      // No MA players at all, fall back to first player
       setActivePlayerId(players[0].deviceId);
     }
-  }, [players, activePlayerId]);
+  }, [players, activePlayerId, passedPlayerId]);
+
+  // Always find a Music Assistant player for browsing (separate from playback controls)
+  const browsePlayerId = (() => {
+    const playingMA = players.find(p => p.mediaState === 'playing' && p.isMusicAssistant);
+    if (playingMA) return playingMA.deviceId;
+    const anyMA = players.find(p => p.isMusicAssistant);
+    if (anyMA) return anyMA.deviceId;
+    return activePlayerId; // fallback to active player if no MA found
+  })();
 
   const activePlayer = players.find(p => p.deviceId === activePlayerId) || {};
   const [currentProgress, setCurrentProgress] = useState(0);
@@ -120,7 +163,7 @@ export default function MusicHome() {
   }, [activePlayer.mediaState, activePlayer.mediaPosition, activePlayer.mediaPositionUpdatedAt, activePlayer.mediaDuration]);
 
 
-  // Browsing logic
+  // Browsing logic — always uses browsePlayerId (a Music Assistant player)
   const browseMedia = useCallback((playerId, type, id) => {
     if (!socket || !playerId) return;
     setIsBrowsing(true);
@@ -139,13 +182,13 @@ export default function MusicHome() {
   }, []);
 
   const loadTab = useCallback((tab) => {
-    if (!activePlayerId) return;
+    if (!browsePlayerId) return;
     setActiveTab(tab);
     setSearchQuery('');
     
     if (tab === 'library') {
       setMediaPath([{ title: 'Library', id: '', type: '' }]);
-      browseMedia(activePlayerId, '', '');
+      browseMedia(browsePlayerId, '', '');
     } else {
       setIsBrowsing(true);
       const targetId = tab;
@@ -155,9 +198,9 @@ export default function MusicHome() {
         { title: 'Library', id: '', type: '' },
         { title: title, id: targetId, type: 'music_assistant' }
       ]);
-      browseMedia(activePlayerId, 'music_assistant', targetId);
+      browseMedia(browsePlayerId, 'music_assistant', targetId);
     }
-  }, [activePlayerId, browseMedia]);
+  }, [browsePlayerId, browseMedia]);
 
   // Search Logic
   const searchTimeout = useRef(null);
@@ -180,21 +223,21 @@ export default function MusicHome() {
         }
       });
     }, 500);
-  }, [activePlayerId, activeTab, loadTab]);
+  }, [activeTab, loadTab]);
 
-  // Initial load
+  // Initial load — use browsePlayerId
   useEffect(() => {
-    if (activePlayerId && mediaPath.length === 0 && !searchQuery) {
+    if (browsePlayerId && mediaPath.length === 0 && !searchQuery) {
       setTimeout(() => {
         loadTab('library');
       }, 0);
     }
-  }, [activePlayerId, loadTab, mediaPath.length, searchQuery]);
+  }, [browsePlayerId, loadTab, mediaPath.length, searchQuery]);
 
   const handleMediaClick = (item) => {
     if (item.can_expand) {
       setMediaPath(prev => [...prev, { title: item.title, id: item.media_content_id, type: item.media_content_type }]);
-      browseMedia(activePlayerId, item.media_content_type, item.media_content_id);
+      browseMedia(browsePlayerId, item.media_content_type, item.media_content_id);
     } else if (item.can_play) {
       socket.emit('mass_command', {
         service: 'play_media',
@@ -216,9 +259,9 @@ export default function MusicHome() {
     setMediaPath(newPath);
     const target = newPath[newPath.length - 1];
     if (target.id === '' && target.type === '') {
-      browseMedia(activePlayerId, '', '');
+      browseMedia(browsePlayerId, '', '');
     } else {
-      browseMedia(activePlayerId, target.type, target.id);
+      browseMedia(browsePlayerId, target.type, target.id);
     }
   };
 
