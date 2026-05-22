@@ -4,7 +4,7 @@ import LandingPage from './components/LandingPage';
 import LoginPage from './components/LoginPage';
 
 // Custom fetch wrapper
-const fetchWithAuth = async (url, options = {}) => {
+export const fetchWithAuth = async (url, options = {}) => {
   const token = localStorage.getItem('smarthome_token');
   const headers = {
     ...options.headers,
@@ -37,12 +37,13 @@ import SensorCard from './components/SensorCard';
 import AddSensorModal from './components/AddSensorModal';
 import MusicDeck from './components/MusicDeck';
 import Staircase from './components/Staircase';
+import MusicHome from './components/MusicHome';
 
 // Dynamic API Base URL for network access
 const API_BASE = `http://${window.location.hostname}:3000`;
 
 // Socket connection
-const socket = io(API_BASE, {
+export const socket = io(API_BASE, {
   path: '/socket.io/'
 });
 
@@ -122,10 +123,29 @@ const Dashboard = () => {
     try {
       const res = await fetchWithAuth(`${API_BASE}/api/devices`);
       const data = await res.json();
-      // Preserve Home Assistant devices since they are only stored in memory via sockets
+      // Preserve live Home Assistant state and merge cleanly without duplicates
       setDevices(prev => {
-        const haDevices = (Array.isArray(prev) ? prev : []).filter(d => d.isHomeAssistant);
-        return [...(Array.isArray(data) ? data : []), ...haDevices];
+        const dbDevices = Array.isArray(data) ? data : [];
+        const prevArray = Array.isArray(prev) ? prev : [];
+        
+        // Start with DB devices, taking live state if available
+        const merged = dbDevices.map(dbDev => {
+          const liveState = prevArray.find(p => p.deviceId === dbDev.deviceId);
+          if (liveState) {
+            return {
+              ...dbDev,
+              ...liveState,
+              title: dbDev.title, // Keep custom DB title
+              room: dbDev.room,   // Keep custom DB room
+              icon: dbDev.icon    // Keep custom DB icon
+            };
+          }
+          return dbDev;
+        });
+
+        // Append HA devices that are NOT in DB
+        const haOnlyDevices = prevArray.filter(d => d.isHomeAssistant && !dbDevices.some(db => db.deviceId === d.deviceId));
+        return [...merged, ...haOnlyDevices];
       });
     } catch (err) {
       console.error('Failed to fetch devices', err);
@@ -317,9 +337,16 @@ const Dashboard = () => {
         };
 
         if (existingIndex >= 0) {
-          // Update existing
+          // Update existing, but preserve custom DB properties
           const updated = [...list];
-          updated[existingIndex] = { ...updated[existingIndex], ...mappedDevice };
+          updated[existingIndex] = { 
+            ...updated[existingIndex], 
+            ...mappedDevice,
+            title: updated[existingIndex].isConfigured ? updated[existingIndex].title : mappedDevice.title,
+            room: updated[existingIndex].isConfigured ? updated[existingIndex].room : mappedDevice.room,
+            icon: updated[existingIndex].isConfigured ? updated[existingIndex].icon : mappedDevice.icon,
+            isConfigured: updated[existingIndex].isConfigured 
+          };
           return updated;
         } else {
           // Add new HA device to the dashboard
@@ -1239,9 +1266,14 @@ const AppRouter = () => {
             </ProtectedRoute>
           } 
         />
+        <Route path="/music" element={
+            <ProtectedRoute>
+              <MusicHome />
+            </ProtectedRoute>
+          } />
       </Routes>
     </BrowserRouter>
   );
 };
-export default AppRouter;
 
+export default AppRouter;

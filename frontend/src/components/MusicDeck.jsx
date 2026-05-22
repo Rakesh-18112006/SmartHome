@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Play, Pause, SkipBack, SkipForward, Volume2, Music, ListMusic, X, ChevronRight, Folder, Search, Disc3 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Play, Pause, SkipBack, SkipForward, Volume2, Music, ListMusic, X, ChevronRight, Folder, Search, Disc3, Maximize2 } from 'lucide-react';
 
 const API_BASE = `http://${window.location.hostname}:3000`;
 
@@ -12,6 +13,7 @@ function proxyImg(url) {
 }
 
 export default function MusicDeck({ players, allMediaPlayers, onCommand, socket }) {
+  const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState(null);
   const [showMediaBrowser, setShowMediaBrowser] = useState(false);
   const [mediaItems, setMediaItems] = useState([]);
@@ -331,13 +333,23 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
                   {activePlayer.mediaArtist || activePlayer.title}
                 </p>
               </div>
-              <button onClick={openLibrary}
-                style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '8px 16px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', transition: 'all 0.2s', flexShrink: 0 }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212,163,115,0.2)'; e.currentTarget.style.borderColor = 'rgba(212,163,115,0.4)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; }}
-              >
-                <ListMusic size={16} /> Library
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={openLibrary}
+                  style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '8px 16px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', transition: 'all 0.2s', flexShrink: 0 }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212,163,115,0.2)'; e.currentTarget.style.borderColor = 'rgba(212,163,115,0.4)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; }}
+                >
+                  <ListMusic size={16} /> Library
+                </button>
+                <button onClick={() => navigate('/music')}
+                  style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '8px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.2s', flexShrink: 0 }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212,163,115,0.2)'; e.currentTarget.style.borderColor = 'rgba(212,163,115,0.4)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; }}
+                  title="Expand to Full Player"
+                >
+                  <Maximize2 size={16} />
+                </button>
+              </div>
             </div>
             
             {/* Progress Bar */}
