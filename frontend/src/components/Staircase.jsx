@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Power, ArrowUp, ArrowDown, Settings as SettingsIcon } from 'lucide-react';
+import { Settings as SettingsIcon } from 'lucide-react';
 import './Staircase.css';
 
 const TOTAL_STEPS = 24;
@@ -55,16 +55,6 @@ const Staircase = ({ socket, mqttStatus }) => {
 
   return (
     <div className="staircase-view">
-      <div className="staircase-header">
-        <h2>Staircase Engine</h2>
-        <div className="indicators">
-          <span className={`badge ${getStateClass()}`}>{currentState}</span>
-          <span className={`badge ${mqttStatus === 'Connected' ? 'badge-ok' : 'badge-err'}`}>
-            {mqttStatus === 'Connected' ? 'MQTT CONNECTED' : 'MQTT DISCONNECTED'}
-          </span>
-        </div>
-      </div>
-
       <div className="staircase-grid">
         {/* LEFT: VISUALIZER */}
         <div className="staircase-panel">
@@ -97,20 +87,6 @@ const Staircase = ({ socket, mqttStatus }) => {
 
         {/* RIGHT: CONTROLS */}
         <div className="staircase-panel controls-panel">
-          <h3>Animation Controls</h3>
-          <div className="btn-grid">
-            <button className="btn btn-up" onClick={() => trigger('UP')}>
-              <ArrowUp size={16} style={{marginRight: '8px'}} /> Walk UP
-            </button>
-            <button className="btn btn-down" onClick={() => trigger('DOWN')}>
-              <ArrowDown size={16} style={{marginRight: '8px'}} /> Walk DOWN
-            </button>
-            <button className="btn btn-off" onClick={() => trigger('OFF_UP')}>Off ▲</button>
-            <button className="btn btn-off" onClick={() => trigger('OFF_DOWN')}>Off ▼</button>
-            <button className="btn btn-emergency" onClick={() => trigger('EMERGENCY_OFF')}>
-              <Power size={16} style={{marginRight: '8px'}} /> EMERGENCY STOP
-            </button>
-          </div>
 
           <h3>Tuning <SettingsIcon size={16} style={{marginLeft: '8px', verticalAlign: 'middle'}}/></h3>
           <div className="slider-group">

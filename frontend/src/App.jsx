@@ -30,14 +30,15 @@ import Sidebar from './components/Sidebar';
 import DeviceCard from './components/DeviceCard';
 import ColorControl from './components/ColorControl';
 import Scenes from './components/Scenes';
-import AddRoomModal from './components/AddRoomModal';
 import ConfigureDeviceModal from './components/ConfigureDeviceModal';
 import ProvisioningModal from './components/ProvisioningModal';
+import AddRoomModal from './components/AddRoomModal';
 import SensorCard from './components/SensorCard';
 import AddSensorModal from './components/AddSensorModal';
 import MusicDeck from './components/MusicDeck';
 import Staircase from './components/Staircase';
 import MusicHome from './components/MusicHome';
+import AudioDevicesTab from './components/AudioDevicesTab';
 
 // Dynamic API Base URL for network access
 const API_BASE = `http://${window.location.hostname}:3000`;
@@ -1234,6 +1235,7 @@ const Dashboard = () => {
               {activeTab === 'scenes' && <Scenes socket={socket} rooms={rooms} allDevices={devices} sensors={sensors} onAddRoom={handleAddRoom} />}
               {activeTab === 'sensors' && renderSensorsSection()}
               {activeTab === 'devices' && renderDevicesView()}
+              {activeTab === 'audio-devices' && <AudioDevicesTab socket={socket} allMediaPlayers={(Array.isArray(devices) ? devices : []).filter(d => d.type === 'media_player')} />}
               {activeTab === 'staircase' && <Staircase socket={socket} mqttStatus={mqttStatus} />}
               {activeTab === 'settings' && renderSettingsView()}
             </>

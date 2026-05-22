@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, Layers, Radio, Cpu, Settings, PanelLeftClose, PanelLeftOpen, AlignEndHorizontal, LogOut } from 'lucide-react';
+import { LayoutDashboard, Layers, Radio, Cpu, Settings, PanelLeftClose, PanelLeftOpen, AlignEndHorizontal, LogOut, Speaker } from 'lucide-react';
 
 const Sidebar = ({ activeTab, setActiveTab }) => {
   const [collapsed, setCollapsed] = useState(false);
@@ -9,6 +9,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
     { id: 'scenes', icon: <Layers size={20} />, label: 'Scenes' },
     { id: 'sensors', icon: <Radio size={20} />, label: 'Sensors' },
     { id: 'devices', icon: <Cpu size={20} />, label: 'Devices' },
+    { id: 'audio-devices', icon: <Speaker size={20} />, label: 'Audio' },
     { id: 'staircase', icon: <AlignEndHorizontal size={20} />, label: 'Staircase' },
     { id: 'settings', icon: <Settings size={20} />, label: 'Settings' },
   ];
