@@ -5,14 +5,12 @@ import { getSensorData, updateSensorData, evaluateAutomations } from '../../modu
 import { callService, sendMessage, cachedHaStates } from '../../integrations/homeassistant/ha-client.js';
 import { publishStateToHA } from '../../integrations/homeassistant/ha-discovery.js';
 import { initStaircase } from '../../modules/staircase/staircaseService.js';
-import { setupMASocketEvents } from '../../integrations/musicassistant/mass-client.js';
 
 export const initSocket = (io, mqttClient) => {
   initStaircase(io);
 
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
-    setupMASocketEvents(socket);
 
     // Send current MQTT status immediately
     socket.emit('mqtt_status', { 
@@ -22,15 +20,6 @@ export const initSocket = (io, mqttClient) => {
     // Send currently cached Home Assistant states to the new client
     cachedHaStates.forEach(state => {
       socket.emit('ha_entity_state_change', state);
-    });
-
-    socket.on('request_initial_states', () => {
-      socket.emit('mqtt_status', { 
-        status: mqttClient.connected ? 'Connected' : 'Offline' 
-      });
-      cachedHaStates.forEach(state => {
-        socket.emit('ha_entity_state_change', state);
-      });
     });
 
     socket.on('ha_command', (data) => {

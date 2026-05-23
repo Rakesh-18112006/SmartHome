@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Play, Pause, SkipBack, SkipForward, Volume2, Music, ListMusic, X, ChevronRight, Folder, Search, Disc3, Maximize2, User, Disc } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, Music, ListMusic, X, ChevronRight, Folder, Search, Disc3, Maximize2 } from 'lucide-react';
 
 const API_BASE = `http://${window.location.hostname}:3000`;
 
@@ -143,17 +143,16 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
 
   // --- Media Browser ---
   const browseMedia = (entityId, type, id) => {
-    if (!socket || !entityId) return;
+    if (!socket) return;
     setIsBrowsing(true);
+    const payload = { entity_id: entityId };
+    if (type) payload.media_content_type = type;
+    if (id) payload.media_content_id = id;
     
-    socket.emit('ha_browse_media', { 
-      entity_id: entityId,
-      media_content_type: type,
-      media_content_id: id
-    }, (response) => {
+    socket.emit('ha_browse_media', payload, (response) => {
       setIsBrowsing(false);
-      if (response && response.result && response.result.children) {
-        setMediaItems(response.result.children.filter(i => i.title !== '..'));
+      if (response && response.result) {
+        setMediaItems(response.result.children || []);
       } else {
         setMediaItems([]);
       }
@@ -208,7 +207,7 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
     searchTimeout.current = setTimeout(() => {
       if (!socket) return;
       setIsSearching(true);
-      socket.emit('mass_search_media', { query: query.trim() }, (response) => {
+      socket.emit('ha_search_media', { entity_id: browseEntityId || defaultBrowseEntity, query: query.trim() }, (response) => {
         setIsSearching(false);
         if (response && response.result) {
           setSearchResults(response.result.children || []);
@@ -217,7 +216,7 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
         }
       });
     }, 400);
-  }, [socket]);
+  }, [socket, browseEntityId, defaultBrowseEntity]);
 
   // Filter: only show music-related items at root level
   const filteredItems = mediaPath.length <= 1 
@@ -249,44 +248,45 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
           alignItems: 'center',
           gap: '10px',
           transition: 'all 0.25s cubic-bezier(.4,0,.2,1)',
-          position: 'relative'
+          textAlign: 'center',
         }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212,163,115,0.1)'; e.currentTarget.style.borderColor = 'rgba(212,163,115,0.3)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; e.currentTarget.style.transform = 'translateY(0)'; }}
       >
         <div style={{
-          width: '100%', aspectRatio: '1', borderRadius: '10px', overflow: 'hidden',
-          background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+          width: '90px', height: '90px', borderRadius: item.can_expand ? '12px' : '50%',
+          background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.3)', flexShrink: 0
         }}>
           {thumb ? (
-            <img src={thumb} alt={item.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+            <img src={thumb} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" onError={(e) => { e.target.style.display='none'; }} />
+          ) : item.can_expand ? (
+            <Folder size={28} color="#d4a373" />
           ) : (
-            item.media_class === 'directory' || item.media_class === 'folder' ? <Folder size={32} color="rgba(255,255,255,0.3)" /> :
-            item.media_class === 'artist' ? <User size={32} color="rgba(255,255,255,0.3)" /> :
-            item.media_class === 'album' ? <Disc size={32} color="rgba(255,255,255,0.3)" /> :
-            <Music size={32} color="rgba(255,255,255,0.3)" />
+            <Disc3 size={28} color="rgba(255,255,255,0.2)" />
           )}
         </div>
-        <div style={{ textAlign: 'center', width: '100%' }}>
-          <div style={{
-            fontSize: '13px', fontWeight: '500', color: '#fff', 
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
-          }}>
-            {item.title}
-          </div>
-          <div style={{
-            fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '4px', textTransform: 'capitalize',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
-          }}>
-            {item.media_class === 'directory' ? 'Folder' : item.media_class}
-            {typeof item.provider === 'string' && item.provider !== 'builtin' && item.provider !== 'library' && (
-              <span style={{ marginLeft: '4px', color: '#1db954' }}>
-                • {item.provider.split('--')[0].replace('ytmusic', 'YT Music').replace('apple_music', 'Apple Music')}
-              </span>
-            )}
-          </div>
+        <div style={{ width: '100%', minHeight: '36px' }}>
+          <h4 style={{ margin: 0, fontSize: '0.8rem', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'rgba(255,255,255,0.9)' }}>
+            {(() => {
+              if ((item.media_class === 'track' || item.media_class === 'album') && item.title && item.title.includes(' - ')) {
+                // Music Assistant returns "Artist - Song Name" or "Artist - Album". We want just the song/album name.
+                return item.title.substring(item.title.indexOf(' - ') + 3);
+              }
+              return item.title;
+            })()}
+          </h4>
+          {item.can_play && !item.can_expand && (
+            <span style={{ fontSize: '0.7rem', color: '#d4a373', fontWeight: 600 }}>▶ Play</span>
+          )}
+          {item.can_expand && (
+            <span style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)' }}>Browse →</span>
+          )}
         </div>
       </div>
     );
   };
+
   return (
     <div className="music-deck-container animate-slide-up" style={{ marginBottom: '24px' }}>
       <div className="music-deck glass" style={{
@@ -334,6 +334,13 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={openLibrary}
+                  style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '8px 16px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', transition: 'all 0.2s', flexShrink: 0 }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212,163,115,0.2)'; e.currentTarget.style.borderColor = 'rgba(212,163,115,0.4)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; }}
+                >
+                  <ListMusic size={16} /> Library
+                </button>
                 <button onClick={() => navigate('/music')}
                   style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '8px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.2s', flexShrink: 0 }}
                   onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212,163,115,0.2)'; e.currentTarget.style.borderColor = 'rgba(212,163,115,0.4)'; }}
@@ -556,7 +563,7 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
                     <div style={{ textAlign: 'center', padding: '60px 20px', color: 'rgba(255,255,255,0.3)' }}>
                       <Search size={48} color="rgba(255,255,255,0.1)" />
                       <p style={{ margin: '16px 0 0', fontSize: '1rem' }}>Search for any song, artist, or album</p>
-                      <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'rgba(255,255,255,0.2)' }}>Results come from Music Assistant</p>
+                      <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'rgba(255,255,255,0.2)' }}>Results come from Apple Music via Music Assistant</p>
                     </div>
                   ) : searchResults.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '40px', color: 'rgba(255,255,255,0.4)' }}>No results found for "{searchQuery}"</div>

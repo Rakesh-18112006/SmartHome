@@ -207,36 +207,6 @@
   justify-content: center;
 }
 
-/* Fallback icons with gradient backgrounds */
-.music-card-fallback-icon {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.music-card-fallback-icon.artist {
-  background: linear-gradient(135deg, #7c3aed, #a855f7, #c084fc);
-}
-
-.music-card-fallback-icon.album {
-  background: linear-gradient(135deg, #c2410c, #ea580c, #f97316);
-}
-
-.music-card-fallback-icon.track {
-  background: linear-gradient(135deg, #1d4ed8, #3b82f6, #60a5fa);
-}
-
-.music-card-fallback-icon.playlist {
-  background: linear-gradient(135deg, #059669, #10b981, #34d399);
-}
-
-.music-card-fallback-icon.directory {
-  background: linear-gradient(135deg, #b45309, #d97706, #f59e0b);
-}
-
 .music-card-img-wrapper img {
   width: 100%;
   height: 100%;

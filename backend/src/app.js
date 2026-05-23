@@ -15,8 +15,6 @@ import { connectMQTT } from './integrations/mqtt/mqtt.js';
 import { initSocket } from './core/websocket/socketService.js';
 import { startScheduler } from './modules/automations/schedulerService.js';
 import smarthomeRoutes from './modules/homes/smarthome.routes.js';
-
-import { connectMA } from './integrations/musicassistant/mass-client.js';
 import automationRoutes from './modules/automations/automations.routes.js';
 import Device from './modules/devices/Device.js';
 import devicesRoutes from './modules/devices/devices.routes.js';
@@ -158,9 +156,6 @@ const startServer = async () => {
 
   // 7. Start Home Assistant Client
   connectHomeAssistant(io);
-
-  // 7.5 Start Music Assistant Client
-  connectMA();
 
   // 8. Start Listening
   const PORT = process.env.PORT || 3000;
