@@ -38,10 +38,26 @@ export const initSocket = (io, mqttClient) => {
     });
 
     socket.on('ha_browse_media', (data, ack) => {
-      console.log(`[HA] Browsing media for ${data.entity_id} (${data.media_content_type || 'root'})`);
+      let targetEntityId = data.entity_id;
+      const state = cachedHaStates.get(targetEntityId);
+      
+      // If the target is unavailable, try to find ANY active Music Assistant player to browse instead
+      if (!state || state.state === 'unavailable') {
+        const fallback = Array.from(cachedHaStates.values()).find(s => 
+          s.entity_id.startsWith('media_player.') && 
+          (s.attributes?.mass_player_id || s.attributes?.provider === 'music_assistant' || s.platform === 'music_assistant') && 
+          s.state !== 'unavailable'
+        );
+        if (fallback) {
+          console.log(`[HA] ${targetEntityId} is unavailable. Using fallback ${fallback.entity_id} for browsing.`);
+          targetEntityId = fallback.entity_id;
+        }
+      }
+
+      console.log(`[HA] Browsing media for ${targetEntityId} (${data.media_content_type || 'root'})`);
       const payload = {
         type: 'media_player/browse_media',
-        entity_id: data.entity_id
+        entity_id: targetEntityId
       };
       // Only include content_type and content_id if provided (root browse omits them)
       if (data.media_content_type) payload.media_content_type = data.media_content_type;
