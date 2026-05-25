@@ -25,8 +25,21 @@ const ProtectedRoute = ({ children }) => {
 };
 
 import io from 'socket.io-client';
-import { Power, Search, LayoutDashboard, Settings, Plus, Activity, Thermometer, Moon, Sun, Radio, Droplets, Footprints, Wind } from 'lucide-react';
+import { Power, Search, LayoutDashboard, Settings, Plus, Activity, Thermometer, Moon, Sun, Radio, Droplets, Footprints, Wind, Sofa, BedDouble, ChefHat, Monitor, Bath, CarFront, Trees, Home as HomeIcon, Coffee } from 'lucide-react';
 import Sidebar from './components/Sidebar';
+
+const getRoomIcon = (roomName) => {
+  const name = (roomName || '').toLowerCase();
+  if (name.includes('living')) return <Sofa size={24} className="room-svg-icon" style={{ color: '#3b82f6' }} />;
+  if (name.includes('bed')) return <BedDouble size={24} className="room-svg-icon" style={{ color: '#6366f1' }} />;
+  if (name.includes('kitchen')) return <ChefHat size={24} className="room-svg-icon" style={{ color: '#f59e0b' }} />;
+  if (name.includes('office') || name.includes('work')) return <Monitor size={24} className="room-svg-icon" style={{ color: '#10b981' }} />;
+  if (name.includes('bath')) return <Bath size={24} className="room-svg-icon" style={{ color: '#06b6d4' }} />;
+  if (name.includes('garage')) return <CarFront size={24} className="room-svg-icon" style={{ color: '#64748b' }} />;
+  if (name.includes('garden') || name.includes('yard')) return <Trees size={24} className="room-svg-icon" style={{ color: '#10b981' }} />;
+  if (name.includes('dining')) return <Coffee size={24} className="room-svg-icon" style={{ color: '#f59e0b' }} />;
+  return <HomeIcon size={24} className="room-svg-icon" style={{ color: '#8b7355' }} />;
+};
 import DeviceCard from './components/DeviceCard';
 import ColorControl from './components/ColorControl';
 import Scenes from './components/Scenes';
@@ -355,6 +368,8 @@ const Dashboard = () => {
         }
       });
     });
+
+    socket.emit('request_initial_states');
 
     return () => {
       socket.off('mqtt_status');
@@ -958,7 +973,7 @@ const Dashboard = () => {
               <div key={room.name} className="room-card-wrapper">
                 <div className="room-card glass card-hover" onClick={() => setCurrentRoom(room)}>
                   <div className="room-card-header">
-                    <span className="room-card-icon">{room.icon}</span>
+                    <span className="room-card-icon">{getRoomIcon(room.name)}</span>
                     <div className={`status-pill ${activeCount > 0 ? 'active' : ''}`}>
                       {activeCount > 0 && <span className="pulse-dot"></span>}
                       {activeCount} Active

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import './Scenes.css';
 import AddRoomModal from './AddRoomModal';
+import { fetchWithAuth } from '../App';
 
 const API_BASE = `http://${window.location.hostname}:3000`;
 const API_AUTOMATIONS = `${API_BASE}/api/automations`;
@@ -69,7 +70,7 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
 
   const fetchRules = useCallback(async () => {
     try {
-      const res = await fetch(API_AUTOMATIONS);
+      const res = await fetchWithAuth(API_AUTOMATIONS);
       const data = await res.json();
       setRules(Array.isArray(data) ? data : []);
     } catch (e) { console.error('Fetch error:', e); }
@@ -77,7 +78,7 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
 
   const fetchCustomSensors = useCallback(async () => {
     try {
-      const res = await fetch(API_SENSORS);
+      const res = await fetchWithAuth(API_SENSORS);
       const data = await res.json();
       const customNames = (Array.isArray(data) ? data : []).map(s => s.name);
       setAvailableSensors(['temperature', 'humidity', 'lux', 'motion', ...customNames]);
@@ -140,7 +141,7 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
     try {
       const method = editId ? 'PUT' : 'POST';
       const url = editId ? `${API_AUTOMATIONS}/${editId}` : API_AUTOMATIONS;
-      const res = await fetch(url, {
+      const res = await fetchWithAuth(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form)
@@ -149,18 +150,23 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
         setShowModal(false);
         fetchRules();
         showToast(editId ? 'Updated' : 'Created');
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        const errorMsg = errData.error || res.statusText;
+        showToast(`Error: ${errorMsg}`);
+        console.error('Save rule error:', errorMsg);
       }
     } catch (e) { showToast('Error saving'); }
   };
 
   const toggleRule = async (id) => {
-    await fetch(`${API_AUTOMATIONS}/${id}/toggle`, { method: 'PATCH' });
+    await fetchWithAuth(`${API_AUTOMATIONS}/${id}/toggle`, { method: 'PATCH' });
     fetchRules();
   };
 
   const deleteRule = async (id) => {
     if (!window.confirm('Delete automation?')) return;
-    await fetch(`${API_AUTOMATIONS}/${id}`, { method: 'DELETE' });
+    await fetchWithAuth(`${API_AUTOMATIONS}/${id}`, { method: 'DELETE' });
     fetchRules();
     showToast('Deleted');
   };
@@ -323,7 +329,7 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
               <div className={`rule-card glass ${rule.enabled ? '' : 'disabled'}`} key={rule._id}>
                 <div className="card-top">
                   <div className="card-icon"><Radio size={24} /></div>
-                  <div className="card-actions">
+                  <div className="scene-card-actions">
                     <button className="action-btn-scene" onClick={() => openEdit(rule)}><Edit3 size={14} /></button>
                     <button className="action-btn-scene delete" onClick={() => deleteRule(rule._id)}><Trash2 size={14} /></button>
                   </div>

@@ -6,11 +6,14 @@ import { callService, sendMessage, cachedHaStates } from '../../integrations/hom
 import { publishStateToHA } from '../../integrations/homeassistant/ha-discovery.js';
 import { initStaircase } from '../../modules/staircase/staircaseService.js';
 
+
 export const initSocket = (io, mqttClient) => {
   initStaircase(io);
 
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
+
+
 
     // Send current MQTT status immediately
     socket.emit('mqtt_status', { 
@@ -20,6 +23,12 @@ export const initSocket = (io, mqttClient) => {
     // Send currently cached Home Assistant states to the new client
     cachedHaStates.forEach(state => {
       socket.emit('ha_entity_state_change', state);
+    });
+
+    socket.on('request_initial_states', () => {
+      cachedHaStates.forEach(state => {
+        socket.emit('ha_entity_state_change', state);
+      });
     });
 
     socket.on('ha_command', (data) => {
@@ -39,6 +48,12 @@ export const initSocket = (io, mqttClient) => {
       if (data.media_content_id) payload.media_content_id = data.media_content_id;
       
       sendMessage(payload, (response) => {
+        if (response.success === false) {
+          console.error(`[HA] Browse media error:`, JSON.stringify(response.error || response).slice(0, 300));
+        } else {
+          const childCount = response?.result?.children?.length || 0;
+          console.log(`[HA] Browse media result: ${childCount} children for ${data.entity_id}`);
+        }
         if (ack) ack(response);
       });
     });

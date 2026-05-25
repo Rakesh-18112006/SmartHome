@@ -24,6 +24,7 @@ import googleSmartHomeRoutes from './integrations/google/googleSmartHome.routes.
 import sensorsRoutes from './modules/sensors/sensors.routes.js';
 import Sensor from './modules/sensors/Sensor.js';
 import { connectHomeAssistant } from './integrations/homeassistant/ha-client.js';
+
 import authRoutes from './modules/users/auth.routes.js';
 import authMiddleware from './core/middleware/auth.middleware.js';
 import User from './modules/users/User.js';
@@ -69,7 +70,7 @@ app.get('/api/ha/image', async (req, res) => {
     
     let targetUrl = url;
     if (url.startsWith('/')) {
-      let baseUrl = 'http://192.168.0.139:8123';
+      let baseUrl = 'http://192.168.0.168:8123';
       if (process.env.HA_URL) {
         baseUrl = process.env.HA_URL.replace('ws://', 'http://').replace('wss://', 'https://').split('/api/websocket')[0];
       }
@@ -156,6 +157,7 @@ const startServer = async () => {
 
   // 7. Start Home Assistant Client
   connectHomeAssistant(io);
+
 
   // 8. Start Listening
   const PORT = process.env.PORT || 3000;
