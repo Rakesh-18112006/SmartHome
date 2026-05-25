@@ -76,9 +76,11 @@ const Dashboard = () => {
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [isSensorModalOpen, setIsSensorModalOpen] = useState(false);
   const [configuringDevice, setConfiguringDevice] = useState(null);
-  const [sensors, setSensors] = useState([]);
   const [currentRoom, setCurrentRoom] = useState(null);
+  const [sensors, setSensors] = useState([]);
   const [timerInfo, setTimerInfo] = useState({ remaining: 0, action: null });
+  const [timerTargetAction, setTimerTargetAction] = useState('TOGGLE');
+  const [customMins, setCustomMins] = useState('');
   const [metrics, setMetrics] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState(null);
@@ -405,6 +407,19 @@ const Dashboard = () => {
     }
   }, [devices, selectedDevice]);
 
+  // Local frontend countdown for smoother UI experience
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimerInfo(prev => {
+        if (prev.remaining > 0) {
+          return { ...prev, remaining: prev.remaining - 1 };
+        }
+        return prev;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const toggleLight = (val) => {
     setLightStatus(val);
     if (selectedDevice) {
@@ -426,14 +441,17 @@ const Dashboard = () => {
 
   const handleSetTimer = (minutes, action) => {
     if (selectedDevice) {
-      if (minutes === "0") {
+      const parsedMins = parseInt(minutes, 10) || 0;
+      if (parsedMins === 0) {
         showToast("🚫 Timer disabled");
+        setTimerInfo({ remaining: 0, action: null });
       } else {
-        showToast(`⏱️ Timer started: ${minutes} min countdown`);
+        showToast(`⏱️ Timer started: ${parsedMins} min countdown`);
+        setTimerInfo({ remaining: parsedMins * 60, action: action });
       }
       socket.emit('set_offline_timer', {
         deviceId: selectedDevice.deviceId,
-        timer: minutes,
+        timer: parsedMins,
         action: action
       });
     }
@@ -847,24 +865,72 @@ const Dashboard = () => {
 
                 <div className="control-card glass timer-card">
                   <div className="card-header-row">
-                    <h3>Offline Timer</h3>
-                    <Moon size={18} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <h3>Offline Timer</h3>
+                      {timerInfo.remaining > 0 ? (
+                        <span style={{ fontSize: '10px', padding: '2px 8px', background: 'var(--primary)', color: '#fff', borderRadius: '10px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span className="pulse-dot" style={{ width: '6px', height: '6px', background: '#fff', margin: 0 }}></span>
+                          ACTIVE
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '10px', padding: '2px 8px', background: 'var(--bg-main)', color: 'var(--text-muted)', borderRadius: '10px', border: '1px solid var(--border)', fontWeight: '800' }}>
+                          INACTIVE
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <select 
+                        style={{ padding: '4px 8px', fontSize: '12px', borderRadius: '4px', background: 'var(--bg-main)', border: '1px solid var(--border)', color: 'var(--text-main)', outline: 'none' }}
+                        value={timerTargetAction}
+                        onChange={e => setTimerTargetAction(e.target.value)}
+                      >
+                        <option value="TOGGLE">Auto-Toggle</option>
+                        <option value="ON">Turn ON</option>
+                        <option value="OFF">Turn OFF</option>
+                      </select>
+                      <Moon size={18} />
+                    </div>
                   </div>
                   <div className="timer-options">
                     {[5, 15, 30, 60, 0].map(mins => (
                       <button
                         key={mins}
                         className={`timer-btn ${timerInfo.remaining > 0 && mins === 0 ? 'cancel' : ''}`}
-                        onClick={() => handleSetTimer(mins, lightStatus ? 'OFF' : 'ON')}
+                        onClick={() => handleSetTimer(mins, timerTargetAction === 'TOGGLE' ? (lightStatus ? 'OFF' : 'ON') : timerTargetAction)}
                       >
                         {mins === 0 ? 'OFF' : `${mins}m`}
                       </button>
                     ))}
                   </div>
-                  {timerInfo.remaining > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+                    <input
+                      type="number"
+                      placeholder="Custom Mins"
+                      value={customMins}
+                      onChange={(e) => setCustomMins(e.target.value)}
+                      style={{ flex: 1, padding: '10px 14px', borderRadius: '12px', border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontSize: '14px', outline: 'none' }}
+                      min="1"
+                    />
+                    <button
+                      onClick={() => {
+                        if (customMins && !isNaN(customMins)) {
+                          handleSetTimer(customMins, timerTargetAction === 'TOGGLE' ? (lightStatus ? 'OFF' : 'ON') : timerTargetAction);
+                          setCustomMins('');
+                        }
+                      }}
+                      style={{ padding: '10px 20px', borderRadius: '12px', border: '1px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', fontWeight: 'bold', cursor: 'pointer' }}
+                    >
+                      SET
+                    </button>
+                  </div>
+                  {timerInfo.remaining > 0 ? (
                     <div className="timer-status-active">
                       <span className="pulse-dot"></span>
-                      Running: {Math.ceil(timerInfo.remaining / 60)} mins remaining
+                      Running: {Math.ceil(timerInfo.remaining / 60)} mins left (Will Turn {timerInfo.action || 'Toggle'})
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: '16px', fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '10px', background: 'var(--bg-main)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--border)', fontWeight: '600' }}>
+                      No offline timer is currently set.
                     </div>
                   )}
                 </div>

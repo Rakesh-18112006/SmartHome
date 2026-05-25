@@ -26,7 +26,10 @@ const ConfigureDeviceModal = ({ isOpen, onClose, onConfigure, device }) => {
   useEffect(() => {
     const fetchRooms = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/rooms`);
+        const token = localStorage.getItem('smarthome_token');
+        const res = await fetch(`${API_BASE}/api/rooms`, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
         const data = await res.json();
         setRooms(data);
       } catch (err) {

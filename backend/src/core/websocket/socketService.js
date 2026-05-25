@@ -274,12 +274,27 @@ export const initSocket = (io, mqttClient) => {
       }
 
       const topic = `${prefix}/${device.deviceId}/timer/command`;
+      
+      let hwAction = "10";
+      if (action === 'ON') hwAction = "11";
+      if (Number(timer) === 0) hwAction = "0";
+
       const mqttPayload = {
         timer: String(timer),
-        action: String(action)
+        action: hwAction
       };
 
       await publishToTopic(topic, mqttPayload);
+      
+      const updatedDevice = await Device.findOneAndUpdate(
+        { deviceId },
+        { timerRemaining: Number(timer) * 60, timerAction: String(action) },
+        { returnDocument: 'after' }
+      );
+      if (updatedDevice) {
+        io.emit('device_state_update', updatedDevice);
+      }
+
       console.log(`[TIMER] Set offline timer for ${deviceId} on topic ${topic}: ${timer} mins, action ${action}`);
     });
 

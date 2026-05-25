@@ -36,11 +36,15 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
 
   const fetchRooms = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/rooms`);
+      const token = localStorage.getItem('smarthome_token');
+      const res = await fetch(`${API_BASE}/api/rooms`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       const data = await res.json();
-      setRooms(data);
+      setRooms(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to fetch rooms', err);
+      setRooms([]);
     }
   };
 
@@ -181,7 +185,7 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
                       onChange={(e) => setFormData({ ...formData, room: e.target.value })}
                     >
                       <option value="Unassigned">Unassigned</option>
-                      {rooms.map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
+                      {(Array.isArray(rooms) ? rooms : []).map(r => <option key={r.name} value={r.name}>{r.name}</option>)}
                     </select>
                   </div>
                 </div>
