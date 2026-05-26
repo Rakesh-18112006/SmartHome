@@ -6,11 +6,14 @@ import { callService, sendMessage, cachedHaStates } from '../../integrations/hom
 import { publishStateToHA } from '../../integrations/homeassistant/ha-discovery.js';
 import { initStaircase } from '../../modules/staircase/staircaseService.js';
 
+
 export const initSocket = (io, mqttClient) => {
   initStaircase(io);
 
   io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
+
+
 
     // Send current MQTT status immediately
     socket.emit('mqtt_status', { 
@@ -22,6 +25,12 @@ export const initSocket = (io, mqttClient) => {
       socket.emit('ha_entity_state_change', state);
     });
 
+    socket.on('request_initial_states', () => {
+      cachedHaStates.forEach(state => {
+        socket.emit('ha_entity_state_change', state);
+      });
+    });
+
     socket.on('ha_command', (data) => {
       const { domain, service, entityId, serviceData } = data;
       console.log(`[HA] Received command from frontend: ${domain}.${service} on ${entityId}`);
@@ -29,16 +38,38 @@ export const initSocket = (io, mqttClient) => {
     });
 
     socket.on('ha_browse_media', (data, ack) => {
-      console.log(`[HA] Browsing media for ${data.entity_id} (${data.media_content_type || 'root'})`);
+      let targetEntityId = data.entity_id;
+      const state = cachedHaStates.get(targetEntityId);
+      
+      // If the target is unavailable, try to find ANY active Music Assistant player to browse instead
+      if (!state || state.state === 'unavailable') {
+        const fallback = Array.from(cachedHaStates.values()).find(s => 
+          s.entity_id.startsWith('media_player.') && 
+          (s.attributes?.mass_player_id || s.attributes?.provider === 'music_assistant' || s.platform === 'music_assistant') && 
+          s.state !== 'unavailable'
+        );
+        if (fallback) {
+          console.log(`[HA] ${targetEntityId} is unavailable. Using fallback ${fallback.entity_id} for browsing.`);
+          targetEntityId = fallback.entity_id;
+        }
+      }
+
+      console.log(`[HA] Browsing media for ${targetEntityId} (${data.media_content_type || 'root'})`);
       const payload = {
         type: 'media_player/browse_media',
-        entity_id: data.entity_id
+        entity_id: targetEntityId
       };
       // Only include content_type and content_id if provided (root browse omits them)
       if (data.media_content_type) payload.media_content_type = data.media_content_type;
       if (data.media_content_id) payload.media_content_id = data.media_content_id;
       
       sendMessage(payload, (response) => {
+        if (response.success === false) {
+          console.error(`[HA] Browse media error:`, JSON.stringify(response.error || response).slice(0, 300));
+        } else {
+          const childCount = response?.result?.children?.length || 0;
+          console.log(`[HA] Browse media result: ${childCount} children for ${data.entity_id}`);
+        }
         if (ack) ack(response);
       });
     });
@@ -259,12 +290,27 @@ export const initSocket = (io, mqttClient) => {
       }
 
       const topic = `${prefix}/${device.deviceId}/timer/command`;
+      
+      let hwAction = "10";
+      if (action === 'ON') hwAction = "11";
+      if (Number(timer) === 0) hwAction = "0";
+
       const mqttPayload = {
         timer: String(timer),
-        action: String(action)
+        action: hwAction
       };
 
       await publishToTopic(topic, mqttPayload);
+      
+      const updatedDevice = await Device.findOneAndUpdate(
+        { deviceId },
+        { timerRemaining: Number(timer) * 60, timerAction: String(action) },
+        { returnDocument: 'after' }
+      );
+      if (updatedDevice) {
+        io.emit('device_state_update', updatedDevice);
+      }
+
       console.log(`[TIMER] Set offline timer for ${deviceId} on topic ${topic}: ${timer} mins, action ${action}`);
     });
 

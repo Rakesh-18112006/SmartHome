@@ -1,5 +1,6 @@
 import { WebSocket } from 'ws';
-const ws = new WebSocket('ws://192.168.0.139:8123/api/websocket');
+import 'dotenv/config';
+const ws = new WebSocket('ws://192.168.0.168:8123/api/websocket');
 let id = 1;
 
 ws.on('open', () => {
@@ -11,13 +12,10 @@ ws.on('message', (data) => {
   if (msg.type === 'auth_ok') {
     ws.send(JSON.stringify({
       id: id++,
-      type: 'media_player/browse_media',
-      entity_id: 'media_player.bharat_smart_services',
-      media_content_type: 'music_assistant',
-      media_content_id: 'tracks'
+      type: 'get_services'
     }));
-  } else if (msg.type === 'result') {
-    console.log(JSON.stringify(msg.result.children.slice(0, 3), null, 2));
+  } else if (msg.id === id - 1) {
+    console.log(JSON.stringify(msg.result.music_assistant, null, 2));
     process.exit(0);
   }
 });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Home, Search, Library, Music2, Disc3, Mic2, ListMusic, Play, Pause, SkipBack, SkipForward, Volume2, ArrowLeft, Loader2 } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { Home, Search, Library, Music2, Disc3, Mic2, ListMusic, Play, Pause, SkipBack, SkipForward, Volume2, ArrowLeft, Loader2, X } from 'lucide-react';
 import { socket, fetchWithAuth } from '../App';
 import '../music.css';
 
@@ -27,6 +27,10 @@ export default function MusicHome() {
   const [isBrowsing, setIsBrowsing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
+  const location = useLocation();
+  const passedPlayerId = location.state?.playerId || null;
+  const passedPlayerUsed = useRef(false);
+
   const [players, setPlayers] = useState([]);
   const [activePlayerId, setActivePlayerId] = useState(null);
 
@@ -50,6 +54,7 @@ export default function MusicHome() {
           mediaDuration: haDevice.raw?.attributes?.media_duration || 0,
           mediaPositionUpdatedAt: haDevice.raw?.attributes?.media_position_updated_at,
           isMusicAssistant: haDevice.isMusicAssistant || haDevice.raw?.attributes?.app_id === 'music_assistant',
+          supportsBrowse: haDevice.supportsBrowse || !!(haDevice.raw?.attributes?.supported_features & 131072),
         };
         
         if (idx >= 0) {
@@ -63,46 +68,98 @@ export default function MusicHome() {
 
     socket.on('ha_entity_state_change', handleStateChange);
     
-    // Fetch via REST API
-    fetchWithAuth(`${API_BASE}/api/devices`)
-      .then(res => res.json())
-      .then(data => {
-        const mapped = data.filter(d => d.type === 'media_player').map(d => ({
-          deviceId: d.deviceId,
-          title: d.name,
-          mediaState: d.state,
-          on: d.state !== 'off' && d.state !== 'unavailable',
-          volume: Math.round((d.attributes?.volume_level || 0) * 100),
-          mediaTitle: d.attributes?.media_title || '',
-          mediaArtist: d.attributes?.media_artist || '',
-          mediaAlbum: d.attributes?.media_album_name || '',
-          albumArt: proxyImg(d.attributes?.entity_picture),
-          mediaPosition: d.attributes?.media_position || 0,
-          mediaDuration: d.attributes?.media_duration || 0,
-          mediaPositionUpdatedAt: d.attributes?.media_position_updated_at,
-          isMusicAssistant: d.isMusicAssistant,
-        }));
-        setPlayers(mapped);
-      }).catch(console.error);
+    socket.emit('request_initial_states');
 
     return () => {
       socket.off('ha_entity_state_change', handleStateChange);
     };
   }, []);
 
-  // Determine active player for the bottom bar and browsing
+  // Determine active player for the bottom bar (controls, now-playing)
+  // Always prefer the Music Assistant version of a player since it has now-playing info
   useEffect(() => {
-    if (players.length > 0 && !activePlayerId) {
-      const playing = players.find(p => p.mediaState === 'playing' && p.isMusicAssistant);
-      const maPlayer = players.find(p => p.isMusicAssistant);
-      setTimeout(() => {
-        setActivePlayerId(playing?.deviceId || maPlayer?.deviceId || players[0].deviceId);
-      }, 0);
+    if (players.length === 0) return;
+    
+    // If a player ID was passed from the dashboard and we haven't used it yet
+    if (passedPlayerId && !passedPlayerUsed.current) {
+      // First: try to find the MA equivalent of the passed player (preferred)
+      const passedPlayer = players.find(p => p.deviceId === passedPlayerId);
+      const baseId = passedPlayerId.replace('media_player.', '');
+      const passedName = passedPlayer?.title?.toLowerCase() || '';
+      
+      const maEquiv = players.find(p =>
+        p.isMusicAssistant && p.deviceId !== passedPlayerId && (
+          p.deviceId.includes(baseId) || 
+          (passedName && p.title && p.title.toLowerCase().includes(passedName)) ||
+          (passedName && p.title && passedName.includes(p.title.toLowerCase()))
+        )
+      );
+      
+      if (maEquiv) {
+        setActivePlayerId(maEquiv.deviceId);
+        passedPlayerUsed.current = true;
+        return;
+      }
+      
+      // Fallback
+      if (passedPlayer) {
+        setActivePlayerId(passedPlayerId);
+        passedPlayerUsed.current = true;
+        return;
+      }
     }
-  }, [players, activePlayerId]);
+    
+    // If we already have an MA player selected and it's still in the list, keep it
+    const currentPlayer = players.find(p => p.deviceId === activePlayerId);
+    if (activePlayerId && currentPlayer?.isMusicAssistant) return;
+    
+    // Auto-select: prefer MA player that's playing, then any MA, then any playing, then first
+    const playingMA = players.find(p => p.mediaState === 'playing' && p.isMusicAssistant);
+    const anyMA = players.find(p => p.isMusicAssistant);
+    const anyPlaying = players.find(p => p.mediaState === 'playing');
+    
+    if (playingMA) {
+      setActivePlayerId(playingMA.deviceId);
+    } else if (anyMA) {
+      setActivePlayerId(anyMA.deviceId);
+    } else if (anyPlaying) {
+      setActivePlayerId(anyPlaying.deviceId);
+    } else if (!activePlayerId) {
+      setActivePlayerId(players[0].deviceId);
+    }
+  }, [players, activePlayerId, passedPlayerId]);
+
+  // Track which player successfully returns browse results
+  const workingBrowsePlayer = useRef(null);
+
+  // Compute browsePlayerId: prefer the cached working player, then try heuristics
+  const browsePlayerId = (() => {
+    // If we already found one that works, stick with it
+    if (workingBrowsePlayer.current && players.find(p => p.deviceId === workingBrowsePlayer.current)) {
+      return workingBrowsePlayer.current;
+    }
+    // Otherwise use heuristics
+    const ma = players.find(p => p.isMusicAssistant && p.supportsBrowse);
+    if (ma) return ma.deviceId;
+    const anyMA = players.find(p => p.isMusicAssistant);
+    if (anyMA) return anyMA.deviceId;
+    const anyBrowse = players.find(p => p.supportsBrowse);
+    if (anyBrowse) return anyBrowse.deviceId;
+    return activePlayerId;
+  })();
 
   const activePlayer = players.find(p => p.deviceId === activePlayerId) || {};
   const [currentProgress, setCurrentProgress] = useState(0);
+  
+  // UI Drag state and debounce refs
+  const [dragVolume, setDragVolume] = useState(null);
+  const [dragProgress, setDragProgress] = useState(null);
+  const volumeTimeout = useRef(null);
+  const seekTimeout = useRef(null);
+  
+  // Queue UI state
+  const [showQueue, setShowQueue] = useState(false);
+  const [localQueue, setLocalQueue] = useState([]);
 
   // Update progress bar smoothly
   useEffect(() => {
@@ -125,44 +182,66 @@ export default function MusicHome() {
   }, [activePlayer.mediaState, activePlayer.mediaPosition, activePlayer.mediaPositionUpdatedAt, activePlayer.mediaDuration]);
 
 
-  // Browsing logic
-  const browseMedia = useCallback((entityId, type, id) => {
-    if (!socket || !entityId) return;
-    setIsBrowsing(true);
-    const payload = { entity_id: entityId };
-    if (type) payload.media_content_type = type;
-    if (id) payload.media_content_id = id;
+  // Browsing logic with unified auto-fallback
+  const fetchMediaResilient = useCallback((initialPlayerId, eventName, queryOrType, id, callback) => {
+    if (!socket) return;
+    const startPlayerId = workingBrowsePlayer.current || initialPlayerId;
     
-    socket.emit('ha_browse_media', payload, (response) => {
-      setIsBrowsing(false);
-      if (response && response.result) {
-        setMediaItems(response.result.children || []);
+    const attempt = (playerId, candidates) => {
+      const payload = { entity_id: playerId };
+      if (eventName === 'ha_search_media') {
+        payload.query = queryOrType;
       } else {
-        setMediaItems([]);
+        if (queryOrType) payload.media_content_type = queryOrType;
+        if (id) payload.media_content_id = id;
       }
+      
+      socket.emit(eventName, payload, (response) => {
+        const hasResults = response?.result?.children?.length > 0;
+        if (hasResults || response?.success !== false) {
+          if (hasResults) workingBrowsePlayer.current = playerId;
+          callback(response);
+        } else {
+          if (candidates.length === 0) {
+            callback(null);
+          } else {
+            attempt(candidates[0].deviceId, candidates.slice(1));
+          }
+        }
+      });
+    };
+    
+    const candidates = players.filter(p => p.deviceId !== startPlayerId);
+    attempt(startPlayerId, candidates);
+  }, [players]);
+
+  const browseMedia = useCallback((entityId, type, id) => {
+    setIsBrowsing(true);
+    fetchMediaResilient(entityId, 'ha_browse_media', type, id, (response) => {
+      setIsBrowsing(false);
+      setMediaItems(response?.result?.children || []);
     });
-  }, []);
+  }, [fetchMediaResilient]);
 
   const loadTab = useCallback((tab) => {
-    if (!activePlayerId) return;
+    if (!browsePlayerId) return;
     setActiveTab(tab);
     setSearchQuery('');
     
     if (tab === 'library') {
       setMediaPath([{ title: 'Library', id: '', type: '' }]);
-      browseMedia(activePlayerId, '', '');
+      browseMedia(browsePlayerId, '', '');
     } else {
       setIsBrowsing(true);
-      // Fetch root library to reliably locate the tab's exact ID for ANY media player
-      socket.emit('ha_browse_media', { entity_id: activePlayerId }, (response) => {
-        if (response && response.result && response.result.children) {
+      fetchMediaResilient(browsePlayerId, 'ha_browse_media', '', '', (response) => {
+        if (response?.result?.children) {
           const target = response.result.children.find(c => c.title.toLowerCase() === tab);
           if (target) {
             setMediaPath([
               { title: 'Library', id: '', type: '' }, 
               { title: target.title, id: target.media_content_id, type: target.media_content_type }
             ]);
-            browseMedia(activePlayerId, target.media_content_type, target.media_content_id);
+            browseMedia(browsePlayerId, target.media_content_type, target.media_content_id);
           } else {
             setIsBrowsing(false);
             setMediaItems([]);
@@ -173,7 +252,7 @@ export default function MusicHome() {
         }
       });
     }
-  }, [activePlayerId, browseMedia]);
+  }, [browsePlayerId, browseMedia, fetchMediaResilient]);
 
   // Search Logic
   const searchTimeout = useRef(null);
@@ -187,40 +266,73 @@ export default function MusicHome() {
     
     setIsBrowsing(true);
     searchTimeout.current = setTimeout(() => {
-      socket.emit('ha_search_media', { entity_id: activePlayerId, query: query.trim() }, (response) => {
+      fetchMediaResilient(browsePlayerId, 'ha_search_media', query.trim(), '', (response) => {
         setIsBrowsing(false);
-        if (response && response.result && response.result.children) {
-          setMediaItems(response.result.children);
-        } else {
-          setMediaItems([]);
-        }
+        setMediaItems(response?.result?.children || []);
       });
     }, 500);
-  }, [activePlayerId, activeTab, loadTab]);
+  }, [browsePlayerId, activeTab, loadTab, fetchMediaResilient]);
 
   // Initial load
   useEffect(() => {
-    if (activePlayerId && mediaPath.length === 0 && !searchQuery) {
+    if (browsePlayerId && mediaPath.length === 0 && !searchQuery) {
       setTimeout(() => {
         loadTab('library');
       }, 0);
     }
-  }, [activePlayerId, loadTab, mediaPath.length, searchQuery]);
+  }, [browsePlayerId, loadTab, mediaPath.length, searchQuery]);
 
-  const handleMediaClick = (item) => {
+    const handleMediaClick = (item) => {
     if (item.can_expand) {
       setMediaPath(prev => [...prev, { title: item.title, id: item.media_content_id, type: item.media_content_type }]);
-      browseMedia(activePlayerId, item.media_content_type, item.media_content_id);
+      browseMedia(browsePlayerId, item.media_content_type, item.media_content_id);
     } else if (item.can_play) {
+      // If clicking a track in a list, queue this track and all subsequent tracks
+      let tracksToQueue = [item.media_content_id];
+      
+      if (item.media_class === 'track' && mediaItems.length > 1) {
+        const itemIndex = mediaItems.findIndex(m => m.media_content_id === item.media_content_id);
+        if (itemIndex !== -1) {
+          const subsequentItems = mediaItems.slice(itemIndex).filter(m => m.media_class === 'track');
+          tracksToQueue = subsequentItems.map(m => m.media_content_id);
+          setLocalQueue(subsequentItems.slice(1));
+        }
+      } else {
+        setLocalQueue([]);
+      }
+
+      // 1. Play the selected track immediately
       socket.emit('ha_command', {
         domain: 'media_player',
         service: 'play_media',
         entityId: activePlayerId,
         serviceData: {
           media_content_type: item.media_content_type,
-          media_content_id: item.media_content_id
+          media_content_id: tracksToQueue[0],
+          enqueue: 'play'
         }
       });
+
+      // 2. Queue all subsequent tracks sequentially
+      if (tracksToQueue.length > 1) {
+        tracksToQueue.slice(1).forEach((trackId, idx) => {
+          setTimeout(() => {
+            socket.emit('ha_command', {
+              domain: 'media_player',
+              service: 'play_media',
+              entityId: activePlayerId,
+              serviceData: {
+                media_content_type: item.media_content_type,
+                media_content_id: trackId,
+                enqueue: 'add'
+              }
+            });
+          }, (idx + 1) * 200); // 200ms delay between each to maintain order
+        });
+        
+        // Show queue panel if we queued multiple songs
+        setTimeout(() => setShowQueue(true), 1000);
+      }
     }
   };
 
@@ -254,6 +366,35 @@ export default function MusicHome() {
     else sendCommand('media_play');
   };
 
+  const handleVolumeChange = (e) => {
+    const val = parseFloat(e.target.value);
+    setDragVolume(val);
+    if (volumeTimeout.current) clearTimeout(volumeTimeout.current);
+    volumeTimeout.current = setTimeout(() => {
+      sendCommand('volume_set', { volume_level: val / 100 });
+      setTimeout(() => setDragVolume(null), 1000);
+    }, 200);
+  };
+
+  const handleSeekChange = (e) => {
+    const val = parseFloat(e.target.value);
+    setDragProgress(val);
+    if (seekTimeout.current) clearTimeout(seekTimeout.current);
+    seekTimeout.current = setTimeout(() => {
+      sendCommand('media_seek', { seek_position: val });
+      setTimeout(() => setDragProgress(null), 1000);
+    }, 200);
+  };
+
+  // Keep local queue somewhat in sync (remove items as they play)
+  useEffect(() => {
+    if (activePlayer.mediaTitle && localQueue.length > 0) {
+      const titleMatchesTop = localQueue[0].title.includes(activePlayer.mediaTitle) || activePlayer.mediaTitle.includes(localQueue[0].title);
+      if (titleMatchesTop) {
+        setLocalQueue(prev => prev.slice(1));
+      }
+    }
+  }, [activePlayer.mediaTitle]);
   return (
     <div className="music-app">
       {/* Sidebar */}
@@ -292,11 +433,6 @@ export default function MusicHome() {
       {/* Main Content */}
       <main className="music-main">
         <header className="music-header">
-          <div className="music-header-actions">
-            <button className="music-back-btn" onClick={handleBackPath} title="Go Back">
-              <ArrowLeft size={20} />
-            </button>
-          </div>
           <div className="music-search">
             <Search size={18} color="var(--text-muted)" />
             <input 
@@ -305,6 +441,11 @@ export default function MusicHome() {
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
             />
+          </div>
+          <div className="music-header-actions">
+            <button className="music-back-btn" onClick={handleBackPath} title="Go Back">
+              <ArrowLeft size={20} />
+            </button>
           </div>
         </header>
 
@@ -341,7 +482,11 @@ export default function MusicHome() {
                       )}
                     </div>
                     <div className="music-card-info">
-                      <div className="music-card-title">{item.title}</div>
+                      <div className="music-card-title">
+                        {['track', 'album'].includes(item.media_class) && item.title.includes(' - ')
+                          ? item.title.split(' - ').slice(1).join(' - ').trim()
+                          : item.title}
+                      </div>
                       <div className="music-card-subtitle" style={{ textTransform: 'capitalize' }}>
                         {item.media_class === 'directory' ? 'Folder' : item.media_class}
                       </div>
@@ -352,6 +497,41 @@ export default function MusicHome() {
             )
           )}
         </div>
+
+        {/* Queue Slide-over Panel */}
+        {showQueue && (
+          <div className="music-queue-panel">
+            <div className="music-queue-header">
+              <h2>Up Next</h2>
+              <button className="music-queue-close" onClick={() => setShowQueue(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="music-queue-list">
+              {localQueue.length === 0 ? (
+                <div style={{ color: 'var(--text-muted)', padding: '1rem', textAlign: 'center' }}>No upcoming tracks.</div>
+              ) : (
+                localQueue.map((qItem, idx) => (
+                  <div key={idx} className="music-queue-item" onClick={() => handleMediaClick(qItem)}>
+                    {qItem.thumbnail ? (
+                      <img src={proxyImg(qItem.thumbnail)} alt={qItem.title} />
+                    ) : (
+                      <div className="music-queue-fallback"><Music2 size={16} color="var(--text-muted)"/></div>
+                    )}
+                    <div className="music-queue-info">
+                      <div className="music-queue-title">
+                        {qItem.title.includes(' - ') ? qItem.title.split(' - ').slice(1).join(' - ').trim() : qItem.title}
+                      </div>
+                      <div className="music-queue-artist">
+                        {qItem.title.includes(' - ') ? qItem.title.split(' - ')[0].trim() : 'Track'}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Bottom Player Bar */}
         <div className="music-player-bar">
@@ -366,6 +546,7 @@ export default function MusicHome() {
             <div className="player-info">
               <div className="player-title">{activePlayer.mediaTitle || 'Not Playing'}</div>
               <div className="player-artist">{activePlayer.mediaArtist || activePlayer.title || 'Select a track to play'}</div>
+              {console.log('PLAYER ATTRIBUTES:', activePlayer.raw?.attributes)}
             </div>
           </div>
 
@@ -382,23 +563,28 @@ export default function MusicHome() {
               </button>
             </div>
             <div className="player-progress">
-              <span className="progress-time">{formatTime(currentProgress)}</span>
+              <span className="progress-time">{formatTime(dragProgress !== null ? dragProgress : currentProgress)}</span>
               <input type="range" className="progress-bar" 
                 min="0" max={activePlayer.mediaDuration || 100}
-                value={currentProgress || 0}
-                onChange={(e) => sendCommand('media_seek', { seek_position: parseFloat(e.target.value) })}
+                value={dragProgress !== null ? dragProgress : (currentProgress || 0)}
+                onChange={handleSeekChange}
               />
               <span className="progress-time">{formatTime(activePlayer.mediaDuration)}</span>
             </div>
           </div>
 
           <div className="player-extra">
+            <button className={`player-btn ${showQueue ? 'active' : ''}`} onClick={() => setShowQueue(!showQueue)} style={{ marginRight: '1rem' }} title="Queue">
+              <ListMusic size={18} color={showQueue ? 'var(--primary)' : 'var(--text-secondary)'} />
+            </button>
             <div className="volume-control">
-              <Volume2 size={16} color="var(--text-secondary)" />
+              <span style={{ color: 'var(--text-secondary)', display: 'flex' }}>
+                <Volume2 size={16} />
+              </span>
               <input type="range" className="volume-slider" 
                 min="0" max="100" 
-                value={activePlayer.volume || 0}
-                onChange={(e) => sendCommand('volume_set', { volume_level: parseFloat(e.target.value) / 100 })}
+                value={dragVolume !== null ? dragVolume : (activePlayer.volume || 0)}
+                onChange={handleVolumeChange}
               />
             </div>
           </div>

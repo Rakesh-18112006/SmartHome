@@ -248,7 +248,7 @@
   color: var(--primary);
 }
 
-.card-actions { display: flex; gap: 8px; }
+.scene-card-actions { display: flex; gap: 8px; }
 .action-btn-scene { 
   width: 32px; 
   height: 32px; 

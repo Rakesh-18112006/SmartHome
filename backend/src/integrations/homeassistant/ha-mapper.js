@@ -81,7 +81,7 @@ export function normalizeEntity(entity, registryData = null) {
         if (attributes.entity_picture.startsWith('http')) {
           base.albumArt = attributes.entity_picture;
         } else {
-          let baseUrl = 'http://192.168.0.139:8123';
+          let baseUrl = 'http://192.168.0.168:8123';
           if (process.env.HA_URL) {
             baseUrl = process.env.HA_URL.replace('ws://', 'http://').replace('wss://', 'https://').split('/api/websocket')[0];
           } else if (process.env.HA_BASE_URL) {
@@ -110,6 +110,8 @@ export function normalizeEntity(entity, registryData = null) {
       base.mediaPosition = attributes.media_position || 0;
       base.mediaDuration = attributes.media_duration || 0;
       base.mediaPositionUpdatedAt = attributes.media_position_updated_at || null;
+      // BROWSE_MEDIA feature flag = 131072 (bit 17)
+      base.supportsBrowse = !!(attributes.supported_features & 131072);
       break;
   }
 

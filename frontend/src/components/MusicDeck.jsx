@@ -26,6 +26,7 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
   const [isSearching, setIsSearching] = useState(false);
   const [activeTab, setActiveTab] = useState('browse'); // 'browse' | 'search'
   const searchTimeout = useRef(null);
+  const volumeTimeouts = useRef({});
   const [currentProgress, setCurrentProgress] = useState(0);
   const isSeeking = useRef(false);
 
@@ -33,16 +34,37 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
 
   // Find active player for controls
   let activePlayerRaw = players.find(p => p.deviceId === selectedId);
+  const allPlayers = allMediaPlayers || players;
+  
   if (!activePlayerRaw) {
-    activePlayerRaw = players.find(p => p.mediaState === 'playing') || players[0];
+    // Try to find a player whose MA equivalent is playing
+    const playerWithPlayingMa = players.find(p => {
+      const baseId = p.deviceId.replace('media_player.', '');
+      const name = p.title?.toLowerCase() || '';
+      const maEquivalent = allPlayers.find(ma => 
+        ma.isMusicAssistant && ma.deviceId !== p.deviceId && (
+          ma.deviceId.includes(baseId) || 
+          (name && ma.title && ma.title.toLowerCase().includes(name)) ||
+          (name && ma.title && name.includes(ma.title.toLowerCase()))
+        )
+      );
+      return maEquivalent?.mediaState === 'playing';
+    });
+
+    activePlayerRaw = playerWithPlayingMa || players.find(p => p.mediaState === 'playing') || players[0];
   }
   
   // Find Music Assistant equivalent for the active player
-  const allPlayers = allMediaPlayers || players;
   if (activePlayerRaw) {
     const activeBaseId = activePlayerRaw.deviceId.replace('media_player.', '');
+    const activeName = activePlayerRaw.title?.toLowerCase() || '';
+    
     const maEquivalent = allPlayers.find(p => 
-      p.isMusicAssistant && (p.deviceId.includes(activeBaseId) || (p.title && activePlayerRaw.title && p.title.toLowerCase().includes(activePlayerRaw.title.toLowerCase())))
+      p.isMusicAssistant && p.deviceId !== activePlayerRaw.deviceId && (
+        p.deviceId.includes(activeBaseId) || 
+        (activeName && p.title && p.title.toLowerCase().includes(activeName)) ||
+        (activeName && p.title && activeName.includes(p.title.toLowerCase()))
+      )
     );
     if (maEquivalent) {
       activePlayerRaw = maEquivalent;
@@ -134,11 +156,18 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
     e.stopPropagation();
     const v = parseInt(vol, 10);
     setOptimistic(id, { volume: v });
-    if (id === activePlayerRaw.deviceId) {
-      broadcastCommand(id, 'volume_set', { volume_level: v / 100 });
-    } else {
-      onCommand(id, 'volume_set', { volume_level: v / 100 });
+    
+    if (volumeTimeouts.current[id]) {
+      clearTimeout(volumeTimeouts.current[id]);
     }
+    
+    volumeTimeouts.current[id] = setTimeout(() => {
+      if (id === activePlayerRaw.deviceId) {
+        broadcastCommand(id, 'volume_set', { volume_level: v / 100 });
+      } else {
+        onCommand(id, 'volume_set', { volume_level: v / 100 });
+      }
+    }, 200);
   };
 
   // --- Media Browser ---
@@ -334,14 +363,7 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={openLibrary}
-                  style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '8px 16px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', transition: 'all 0.2s', flexShrink: 0 }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212,163,115,0.2)'; e.currentTarget.style.borderColor = 'rgba(212,163,115,0.4)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; }}
-                >
-                  <ListMusic size={16} /> Library
-                </button>
-                <button onClick={() => navigate('/music')}
+                <button onClick={() => navigate('/music', { state: { playerId: activePlayerRaw?.deviceId } })}
                   style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', padding: '8px', borderRadius: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', transition: 'all 0.2s', flexShrink: 0 }}
                   onMouseEnter={e => { e.currentTarget.style.background = 'rgba(212,163,115,0.2)'; e.currentTarget.style.borderColor = 'rgba(212,163,115,0.4)'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; }}

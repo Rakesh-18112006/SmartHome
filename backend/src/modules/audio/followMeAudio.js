@@ -77,10 +77,14 @@ function fadeVolume(entityId, startVol, endVol, durationMs) {
 
   // If already at target, do nothing but enforce the final state just in case
   if (Math.abs(startVol - endVol) < 0.02) {
-    callService('media_player', 'volume_set', {
-      entity_id: entityId,
-      volume_level: Number(endVol.toFixed(2))
-    }).catch(e => console.error(`[FollowMeAudio] Force volume error:`, e.message));
+    try {
+      callService('media_player', 'volume_set', {
+        entity_id: entityId,
+        volume_level: Number(endVol.toFixed(2))
+      });
+    } catch (e) {
+      console.error(`[FollowMeAudio] Force volume error:`, e.message);
+    }
     return;
   }
 

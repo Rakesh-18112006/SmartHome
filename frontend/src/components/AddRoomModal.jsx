@@ -1,9 +1,23 @@
 import React, { useState } from 'react';
+import { Home, Sofa, BedDouble, ChefHat, Bath, Building, Trees, CarFront, Gamepad2, Lightbulb } from 'lucide-react';
+
+const roomIcons = [
+  { id: 'Home', Component: Home, color: '#8b7355' },
+  { id: 'Sofa', Component: Sofa, color: '#3b82f6' },
+  { id: 'BedDouble', Component: BedDouble, color: '#6366f1' },
+  { id: 'ChefHat', Component: ChefHat, color: '#f59e0b' },
+  { id: 'Bath', Component: Bath, color: '#06b6d4' },
+  { id: 'Building', Component: Building, color: '#94a3b8' },
+  { id: 'Trees', Component: Trees, color: '#10b981' },
+  { id: 'CarFront', Component: CarFront, color: '#64748b' },
+  { id: 'Gamepad2', Component: Gamepad2, color: '#8b5cf6' },
+  { id: 'Lightbulb', Component: Lightbulb, color: '#eab308' },
+];
 
 const AddRoomModal = ({ isOpen, onClose, onAdd }) => {
   const [formData, setFormData] = useState({
     name: '',
-    icon: '🏠'
+    icon: 'Home'
   });
 
   if (!isOpen) return null;
@@ -14,8 +28,6 @@ const AddRoomModal = ({ isOpen, onClose, onAdd }) => {
     onAdd(formData);
     onClose();
   };
-
-  const icons = ['🏠', '🛋️', '🛏️', '🍳', '🛁', '🏢', '🌳', '🚗', '🎮', '💡'];
 
   return (
     <div className="modal-overlay">
@@ -38,14 +50,14 @@ const AddRoomModal = ({ isOpen, onClose, onAdd }) => {
           <div className="form-group">
             <label>Room Icon</label>
             <div className="icon-selector">
-              {icons.map(icon => (
+              {roomIcons.map(({ id, Component, color }) => (
                 <button
-                  key={icon}
+                  key={id}
                   type="button"
-                  className={`icon-btn ${formData.icon === icon ? 'active' : ''}`}
-                  onClick={() => setFormData({ ...formData, icon })}
+                  className={`icon-btn ${formData.icon === id ? 'active' : ''}`}
+                  onClick={() => setFormData({ ...formData, icon: id })}
                 >
-                  {icon}
+                  <Component size={20} style={{ color: formData.icon === id ? '#fff' : color }} />
                 </button>
               ))}
             </div>

@@ -1,14 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Volume2, Speaker, Music2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import './AudioDevices.css';
 
 const AudioDevicesTab = ({ socket, allMediaPlayers }) => {
+  const navigate = useNavigate();
   const [localPlayers, setLocalPlayers] = useState(allMediaPlayers || []);
+  const [dragVolumes, setDragVolumes] = useState({});
+  const volumeTimeouts = React.useRef({});
 
   // Update local state smoothly
   useEffect(() => {
     setLocalPlayers(allMediaPlayers || []);
   }, [allMediaPlayers]);
+
+  const handleVolumeChange = (player, e) => {
+    const val = parseFloat(e.target.value);
+    setDragVolumes(prev => ({ ...prev, [player.deviceId]: val }));
+    
+    if (volumeTimeouts.current[player.deviceId]) {
+      clearTimeout(volumeTimeouts.current[player.deviceId]);
+    }
+    
+    volumeTimeouts.current[player.deviceId] = setTimeout(() => {
+      sendCommand(player.deviceId, 'volume_set', { volume_level: val / 100 });
+      setTimeout(() => {
+        setDragVolumes(prev => {
+          const next = { ...prev };
+          delete next[player.deviceId];
+          return next;
+        });
+      }, 1000);
+    }, 200);
+  };
 
   const sendCommand = (entityId, service, serviceData = {}) => {
     if (!socket || !entityId) return;
@@ -40,7 +64,14 @@ const AudioDevicesTab = ({ socket, allMediaPlayers }) => {
 
       <div className="audio-devices-grid">
         {localPlayers.map(player => (
-          <div key={player.deviceId} className="audio-device-card">
+          <div 
+            key={player.deviceId} 
+            className="audio-device-card" 
+            style={{ cursor: 'pointer' }}
+            onClick={() => {
+              navigate('/music', { state: { playerId: player.deviceId } });
+            }}
+          >
             <div className="audio-device-art">
               {player.albumArt ? (
                 <img src={player.albumArt} alt="Album Art" />
@@ -69,7 +100,7 @@ const AudioDevicesTab = ({ socket, allMediaPlayers }) => {
               </div>
             </div>
 
-            <div className="audio-device-controls-wrapper">
+            <div className="audio-device-controls-wrapper" onClick={e => e.stopPropagation()} style={{ cursor: 'default' }}>
               <div className="audio-device-playback">
                 <button className="audio-btn" onClick={() => sendCommand(player.deviceId, 'media_previous_track')}>
                   <SkipBack size={18} />
@@ -83,18 +114,14 @@ const AudioDevicesTab = ({ socket, allMediaPlayers }) => {
               </div>
 
               <div className="audio-device-volume">
-                <Volume2 size={16} className="text-[var(--text-secondary)]" />
+                <Volume2 size={16} style={{ color: 'var(--text-secondary)' }} />
                 <input 
                   type="range" 
                   min="0" 
                   max="100" 
-                  value={player.volume || 0}
+                  value={dragVolumes[player.deviceId] !== undefined ? dragVolumes[player.deviceId] : (player.volume || 0)}
                   className="audio-volume-slider"
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value);
-                    setLocalPlayers(prev => prev.map(p => p.deviceId === player.deviceId ? { ...p, volume: val } : p));
-                    sendCommand(player.deviceId, 'volume_set', { volume_level: val / 100 });
-                  }}
+                  onChange={(e) => handleVolumeChange(player, e)}
                 />
               </div>
             </div>

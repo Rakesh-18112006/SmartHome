@@ -217,9 +217,14 @@ export const connectMQTT = (io) => {
         }
 
         // Timer parsing from PDF format: {"timer":{"remaining":30,"action":10}}
+        let isStatusPing = data.relayStatus !== undefined || data.switch !== undefined || data.state !== undefined;
+        
         if (data.timer) {
           updates.timerRemaining = data.timer.remaining;
           updates.timerAction = String(data.timer.action);
+        } else if (isStatusPing) {
+          updates.timerRemaining = 0;
+          updates.timerAction = null;
         }
         
         const updatedDevice = await Device.findOneAndUpdate({ deviceId }, updates, { returnDocument: 'after' });
