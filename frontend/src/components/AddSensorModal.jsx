@@ -20,7 +20,7 @@ const AddSensorModal = ({ isOpen, onClose, onAdd, rooms }) => {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content animate-slide-up" style={{ maxWidth: '420px', padding: '0', overflow: 'hidden' }}>
+      <div className="modal-content animate-slide-up premium-sensor-modal">
         <div className="modal-premium-header">
           <div className="header-bg-glow"></div>
           <div className="header-content-top">
@@ -93,7 +93,7 @@ const AddSensorModal = ({ isOpen, onClose, onAdd, rooms }) => {
           </div>
         </form>
 
-        <style jsx>{`
+        <style>{`
           .modal-overlay {
             position: fixed;
             top: 0;
@@ -234,6 +234,42 @@ const AddSensorModal = ({ isOpen, onClose, onAdd, rooms }) => {
           .flex-grow { flex: 1; }
           .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
           @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+          .premium-sensor-modal {
+            max-width: 420px;
+            padding: 0 !important;
+            overflow: hidden;
+            width: 100%;
+          }
+
+          @media (max-width: 768px) {
+            .modal-overlay {
+              align-items: flex-end;
+              padding: 0;
+            }
+            .premium-sensor-modal {
+              max-width: 100% !important;
+              border-radius: 24px 24px 0 0 !important;
+              margin: 0;
+              max-height: 90dvh;
+              overflow-y: auto;
+            }
+            .form-grid-2 {
+              grid-template-columns: 1fr;
+            }
+            .premium-modal-footer {
+              flex-direction: column-reverse;
+              gap: 8px;
+            }
+            .action-btn-pill {
+              width: 100%;
+              justify-content: center;
+              padding: 14px;
+            }
+            .premium-form-body {
+              padding-bottom: max(24px, env(safe-area-inset-bottom));
+            }
+          }
         `}</style>
       </div>
     </div>

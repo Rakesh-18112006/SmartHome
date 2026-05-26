@@ -377,7 +377,7 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
             </div>
           </div>
 
-          <div className="premium-form-body" style={{ maxHeight: '360px', overflowY: 'auto', padding: '16px', gap: '14px' }}>
+          <div className="premium-form-body">
             <div className="form-section" style={{ gap: '12px' }}>
               <div className="input-field-wrapper" style={{ gap: '6px' }}>
                 <label style={{ fontSize: '10px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -416,7 +416,7 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
               <div className="items-list" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {form.conditions.map((c, i) => (
                   <div className="item-card" key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: '10px', border: '1px solid var(--border)' }}>
-                    <div className="item-controls" style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr 1fr', gap: '6px', flexGrow: 1 }}>
+                    <div className="item-controls">
                       <select className="premium-select" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px' }} value={c.sensor} onChange={e => updateCond(i, 'sensor', e.target.value)}>
                         {availableSensors.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
@@ -448,7 +448,7 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
 
                   return (
                     <div className="item-card" key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: '10px', border: '1px solid var(--border)' }}>
-                      <div className="action-main" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', flexGrow: 1 }}>
+                      <div className="action-main">
                         <select className="premium-select" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px' }} value={a.targetDeviceId} onChange={e => updateAction(i, 'targetDeviceId', e.target.value)}>
                           <option value="">Select Device</option>
                           {(Array.isArray(allDevices) ? allDevices : []).map(d => <option key={d.deviceId} value={d.deviceId}>{d.title}</option>)}

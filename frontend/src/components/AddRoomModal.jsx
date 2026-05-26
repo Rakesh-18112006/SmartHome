@@ -66,7 +66,7 @@ const AddRoomModal = ({ isOpen, onClose, onAdd }) => {
         </form>
       </div>
 
-      <style jsx>{`
+      <style>{`
         .modal-overlay {
           position: fixed;
           top: 0;
@@ -114,6 +114,19 @@ const AddRoomModal = ({ isOpen, onClose, onAdd }) => {
 
         .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
         @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+        @media (max-width: 768px) {
+          .modal-overlay { align-items: flex-end; padding: 0; }
+          .modal-content { 
+            width: 100%; 
+            max-width: 100%; 
+            border-radius: 24px 24px 0 0; 
+            padding: 24px 20px 32px; 
+            border-bottom: none; 
+            border-left: none; 
+            border-right: none; 
+          }
+        }
       `}</style>
     </div>
   );

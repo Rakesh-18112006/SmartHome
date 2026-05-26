@@ -338,7 +338,7 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
           borderBottom: players.length > 1 ? '1px solid rgba(255,255,255,0.05)' : 'none'
         }}>
           {/* Album Art */}
-          <div style={{
+          <div className="active-player-art" style={{
             width: '120px', height: '120px', borderRadius: '16px', overflow: 'hidden',
             boxShadow: '0 8px 32px rgba(0,0,0,0.5)', flexShrink: 0,
             background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center'
@@ -351,14 +351,14 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
           </div>
           
           {/* Controls */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="active-player-body" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px', minWidth: 0 }}>
             {/* Track Info + Library Button */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 600, color: '#fff', textShadow: '0 2px 8px rgba(0,0,0,0.5)', opacity: activePlayer.isBuffering ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+            <div className="active-player-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div className="active-player-info" style={{ minWidth: 0, paddingRight: '12px' }}>
+                <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 600, color: '#fff', textShadow: '0 2px 8px rgba(0,0,0,0.5)', opacity: activePlayer.isBuffering ? 0.5 : 1, transition: 'opacity 0.2s', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {activePlayer.mediaTitle || 'Not Playing'}
                 </h2>
-                <p style={{ margin: '4px 0 0', fontSize: '1rem', color: 'rgba(255,255,255,0.7)', opacity: activePlayer.isBuffering ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                <p style={{ margin: '4px 0 0', fontSize: '1rem', color: 'rgba(255,255,255,0.7)', opacity: activePlayer.isBuffering ? 0.5 : 1, transition: 'opacity 0.2s', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {activePlayer.mediaArtist || activePlayer.title}
                 </p>
               </div>
@@ -376,7 +376,7 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
             
             {/* Progress Bar */}
             {(activePlayer.mediaState === 'playing' || activePlayer.mediaState === 'paused' || activePlayer.mediaDuration > 0) && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', maxWidth: '400px' }}>
+              <div className="active-player-progress" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px', maxWidth: '400px' }}>
                 <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', minWidth: '40px', textAlign: 'right' }}>
                   {formatTime(currentProgress)}
                 </span>
@@ -388,7 +388,7 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
                   onMouseUp={handleSeekEnd}
                   onTouchStart={handleSeekStart}
                   onTouchEnd={handleSeekEnd}
-                  style={{ flex: 1, accentColor: '#d4a373', height: '4px' }} 
+                  style={{ flex: 1, accentColor: '#d4a373', height: '4px', minWidth: 0 }} 
                 />
                 <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', minWidth: '40px' }}>
                   {formatTime(activePlayer.mediaDuration)}
@@ -397,7 +397,7 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
             )}
             
             {/* Transport Controls */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div className="active-player-transport" style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
               <button onClick={(e) => { e.stopPropagation(); broadcastCommand(activePlayer.deviceId, 'media_previous_track'); }}
                 style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: '8px', opacity: 0.7, transition: 'opacity 0.2s' }}
                 onMouseEnter={e => e.currentTarget.style.opacity = 1}
@@ -412,7 +412,7 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
                   border: `1px solid ${activePlayer.mediaState === 'playing' ? 'rgba(212,163,115,0.4)' : 'rgba(255,255,255,0.2)'}`,
                   color: '#fff', cursor: 'pointer', width: '56px', height: '56px', borderRadius: '50%',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  backdropFilter: 'blur(10px)', transition: 'all 0.2s'
+                  backdropFilter: 'blur(10px)', transition: 'all 0.2s', flexShrink: 0
                 }}>
                 {activePlayer.mediaState === 'playing' ? <Pause size={28} /> : <Play size={28} style={{ marginLeft: '4px' }} />}
               </button>
@@ -426,12 +426,12 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
               </button>
 
               {/* Volume */}
-              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', flex: 1, maxWidth: '180px' }}>
-                <Volume2 size={16} color="rgba(255,255,255,0.5)" />
+              <div className="active-player-volume" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', flex: 1, maxWidth: '180px', minWidth: '120px' }}>
+                <Volume2 size={16} color="rgba(255,255,255,0.5)" style={{ flexShrink: 0 }} />
                 <input type="range" min="0" max="100" value={activePlayer.volume || 0} 
                   onChange={(e) => handleVolume(e, activePlayer.deviceId, e.target.value)}
-                  style={{ width: '100%', accentColor: '#d4a373' }} />
-                <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', minWidth: '28px', textAlign: 'right' }}>{activePlayer.volume || 0}%</span>
+                  style={{ width: '100%', accentColor: '#d4a373', minWidth: 0 }} />
+                <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)', minWidth: '28px', textAlign: 'right', flexShrink: 0 }}>{activePlayer.volume || 0}%</span>
               </div>
             </div>
           </div>

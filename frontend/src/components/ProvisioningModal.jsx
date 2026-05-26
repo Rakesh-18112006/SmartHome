@@ -102,7 +102,7 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content animate-slide-up">
+      <div className="modal-content animate-slide-up provisioning-modal">
         <div className="modal-header">
           <h2>{step === 1 ? 'Select Device Type' : 'Configure & Connect'}</h2>
           <button className="close-btn" onClick={onClose}>&times;</button>
@@ -261,13 +261,13 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
         )}
       </div>
 
-      <style jsx>{`
+      <style>{`
         .modal-overlay {
           position: fixed; top: 0; left: 0; right: 0; bottom: 0;
           background: rgba(64, 52, 42, 0.2); backdrop-filter: blur(8px);
           display: flex; align-items: center; justify-content: center; z-index: 1100;
         }
-        .modal-content {
+        .provisioning-modal {
           background: var(--bg-card); width: 90%; max-width: 440px; border-radius: var(--radius-lg); padding: 28px;
           box-shadow: var(--shadow-deep); position: relative; overflow: hidden; border: 1px solid var(--border);
         }
@@ -348,6 +348,38 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+
+        @media (max-width: 768px) {
+          .modal-overlay {
+            align-items: flex-end;
+            padding: 0;
+          }
+          .provisioning-modal {
+            width: 100% !important;
+            max-width: 100% !important;
+            border-radius: 24px 24px 0 0 !important;
+            margin: 0;
+            max-height: 90dvh;
+            overflow-y: auto;
+            padding: 24px 20px !important;
+            padding-bottom: max(24px, env(safe-area-inset-bottom)) !important;
+          }
+          .form-row {
+            grid-template-columns: 1fr;
+          }
+          .icon-selection-grid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+          .modal-footer-btns {
+            flex-direction: column-reverse;
+          }
+          .primary-setup-btn, .secondary-btn {
+            width: 100%;
+          }
+          .sub-devices-list {
+            grid-template-columns: 1fr;
+          }
+        }
       `}</style>
     </div>
   );

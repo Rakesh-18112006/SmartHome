@@ -247,3 +247,32 @@
   width: 100%;
   accent-color: var(--primary);
 }
+
+@media (max-width: 768px) {
+  .staircase-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .staircase-grid {
+    grid-template-columns: 1fr;
+    flex: auto; /* Remove strict flex: 1 limit */
+    min-height: auto;
+  }
+  
+  /* On mobile, let the page scroll instead of trying to fit both panels on screen perfectly */
+  .staircase-view {
+    height: auto; 
+    overflow-y: visible;
+  }
+  
+  .staircase-bars {
+    min-height: 350px;
+    padding-right: 0.5rem;
+  }
+  
+  .staircase-panel {
+    padding: 1rem;
+  }
+}

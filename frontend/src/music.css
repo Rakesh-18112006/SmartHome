@@ -123,6 +123,11 @@
   color: var(--primary);
 }
 
+.music-search-wrapper {
+  display: flex;
+  align-items: center;
+}
+
 .music-search {
   display: flex;
   align-items: center;
@@ -133,6 +138,14 @@
   width: 300px;
   box-shadow: var(--shadow-soft);
   transition: var(--transition);
+}
+
+.mobile-menu-toggle {
+  display: none;
+}
+
+.mobile-music-nav {
+  display: none;
 }
 
 .music-search:focus-within {
@@ -205,6 +218,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
 }
 
 .music-card-img-wrapper img {
@@ -793,3 +807,345 @@ height: 48px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ===== TABLET RESPONSIVENESS ===== */
+@media (max-width: 1024px) {
+  .music-sidebar {
+    width: 200px;
+    padding: 1rem 0.75rem;
+  }
+
+  .music-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .music-content {
+    padding: 0 1.5rem 8rem 1.5rem;
+  }
+
+  .music-content-header h1 {
+    font-size: 2rem;
+  }
+
+  .volume-control {
+    width: 90px;
+  }
+
+  .music-queue-panel {
+    width: 300px;
+  }
+}
+
+/* ===== MOBILE RESPONSIVENESS ===== */
+@media (max-width: 768px) {
+  .music-app {
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    position: relative;
+  }
+
+  .mobile-menu-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    padding: 8px;
+    margin-right: 8px;
+    cursor: pointer;
+    border-radius: 8px;
+  }
+  .mobile-menu-toggle:active {
+    background-color: rgba(255,255,255,0.1);
+  }
+
+  /* Sidebar is hidden completely on mobile for Music */
+  .music-sidebar {
+    display: none !important;
+  }
+
+  .mobile-music-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 0.75rem 0.5rem 0.75rem;
+    justify-content: flex-start;
+  }
+
+  .mobile-music-nav .music-nav-item {
+    flex: 0 0 auto;
+    width: auto;
+    justify-content: center;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    border: 1px solid transparent;
+  }
+  
+  .mobile-music-nav .music-nav-item.active {
+    background: rgba(212,163,115,0.2);
+    border-color: rgba(212,163,115,0.4);
+    color: var(--primary);
+  }
+
+  /* Header */
+  .music-header {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    padding: 0.75rem 1rem;
+    gap: 0.75rem;
+  }
+
+  .music-search-wrapper {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    align-items: center;
+  }
+
+  .music-search {
+    flex: 1;
+    width: auto;
+    padding: 0.45rem 0.75rem;
+  }
+
+  .music-search input {
+    font-size: 0.85rem;
+  }
+
+  .music-header-actions {
+    justify-content: flex-end;
+  }
+
+  .music-back-btn, .music-home-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  /* Main content */
+  .music-main {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .music-content {
+    padding: 0 0.75rem 160px 0.75rem;
+  }
+
+  .music-content-header {
+    margin-bottom: 1rem;
+  }
+
+  .music-content-header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+
+  /* Music Cards Grid - always 2 columns on mobile to prevent cutoff */
+  .music-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    align-items: start;
+  }
+
+  .music-card {
+    gap: 0.5rem;
+    overflow: hidden;
+  }
+
+  .music-card-img-wrapper {
+    border-radius: 10px;
+    aspect-ratio: 1 / 1 !important;
+    max-height: none;
+    overflow: hidden;
+  }
+
+  .music-card-img-wrapper img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .music-card-img-wrapper.artist {
+    border-radius: 50%;
+  }
+
+  .music-card-play {
+    width: 32px;
+    height: 32px;
+    bottom: 0.5rem;
+    right: 0.5rem;
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .music-card-play svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .music-card-title {
+    font-size: 0.8rem;
+    line-height: 1.3;
+  }
+
+  .music-card-subtitle {
+    font-size: 0.7rem;
+  }
+
+  /* List items */
+  .music-list-item {
+    padding: 0.6rem 0.5rem;
+    gap: 0.75rem;
+  }
+
+  .music-list-img {
+    width: 40px;
+    height: 40px;
+  }
+
+  .music-list-title {
+    font-size: 0.85rem;
+  }
+
+  .music-list-subtitle {
+    font-size: 0.75rem;
+  }
+
+  /* Bottom Player Bar - stacked layout */
+  .music-player-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: auto;
+    padding: 0.6rem 0.75rem calc(0.6rem + env(safe-area-inset-bottom));
+    flex-direction: column;
+    gap: 0.4rem;
+    z-index: 200;
+  }
+
+  .player-now-playing {
+    width: 100%;
+    flex: none;
+    gap: 0.75rem;
+  }
+
+  .player-art {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    flex-shrink: 0;
+  }
+
+  .player-info {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .player-title {
+    font-size: 0.85rem;
+  }
+
+  .player-artist {
+    font-size: 0.7rem;
+  }
+
+  .player-controls-wrapper {
+    flex: none;
+    width: 100%;
+    max-width: none;
+  }
+
+  .player-controls {
+    gap: 1.75rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .player-btn.play-pause {
+    width: 34px;
+    height: 34px;
+  }
+
+  .player-progress {
+    gap: 0.5rem;
+  }
+
+  .progress-time {
+    font-size: 0.65rem;
+    min-width: 32px;
+  }
+
+  /* Hide desktop volume, use phone hardware buttons */
+  .player-extra {
+    display: none;
+  }
+
+  /* Queue Panel - full screen overlay on mobile */
+  .music-queue-panel {
+    width: 100%;
+    height: calc(100vh - 120px);
+    height: calc(100dvh - 120px);
+    box-shadow: 0 -10px 30px rgba(0,0,0,0.3);
+  }
+
+  .music-queue-header {
+    padding: 1rem;
+  }
+
+  .music-queue-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .music-queue-list {
+    padding: 0.75rem;
+  }
+
+  .music-queue-item {
+    padding: 0.6rem;
+    border-radius: 0.5rem;
+  }
+
+  .music-queue-item img, .music-queue-fallback {
+    width: 40px;
+    height: 40px;
+    margin-right: 0.75rem;
+  }
+
+  .music-queue-title {
+    font-size: 0.85rem;
+  }
+
+  .music-queue-artist {
+    font-size: 0.75rem;
+  }
+}
+
+/* ===== VERY SMALL PHONES (< 380px) ===== */
+@media (max-width: 380px) {
+  .music-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.6rem;
+  }
+
+  .music-card-title {
+    font-size: 0.75rem;
+  }
+
+  .music-nav-item {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .music-content-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .player-controls {
+    gap: 1.25rem;
+  }
+}
+

@@ -7,9 +7,28 @@
 
 .audio-devices-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1.25rem;
   max-width: 1200px;
+}
+
+@media (max-width: 768px) {
+  .audio-devices-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .audio-devices-header h2 {
+    font-size: 1.5rem !important; /* Tailwind text-3xl is 1.875rem, override to 1.5rem */
+  }
+  
+  .audio-device-card {
+    border-radius: 12px;
+  }
+  
+  .audio-device-playback {
+    gap: 1.5rem; /* give buttons more touch target space on mobile */
+  }
 }
 
 .audio-device-card {
