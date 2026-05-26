@@ -433,11 +433,6 @@ export default function MusicHome() {
       {/* Main Content */}
       <main className="music-main">
         <header className="music-header">
-          <div className="music-header-actions">
-            <button className="music-back-btn" onClick={handleBackPath} title="Go Back">
-              <ArrowLeft size={20} />
-            </button>
-          </div>
           <div className="music-search">
             <Search size={18} color="var(--text-muted)" />
             <input 
@@ -446,6 +441,11 @@ export default function MusicHome() {
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
             />
+          </div>
+          <div className="music-header-actions">
+            <button className="music-back-btn" onClick={handleBackPath} title="Go Back">
+              <ArrowLeft size={20} />
+            </button>
           </div>
         </header>
 
