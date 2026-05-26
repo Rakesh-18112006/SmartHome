@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home, Lock, User, ArrowRight, Loader2 } from 'lucide-react';
+import { Home, Lock, User, ArrowRight, Loader2, ArrowLeft } from 'lucide-react';
 
 const API_BASE = `http://${window.location.hostname}:3000`;
 
@@ -40,7 +40,7 @@ const LoginPage = () => {
         onClick={() => navigate('/')}
         className="back-btn"
       >
-        <Home className="w-5 h-5" />
+        <ArrowLeft className="w-5 h-5" />
         <span>Back to Home</span>
       </button>
 

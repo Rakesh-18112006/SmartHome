@@ -405,9 +405,7 @@ export default function MusicHome() {
         </div>
         
         <div className="music-nav-group">
-          <button className="music-nav-item" onClick={() => navigate('/dashboard')}>
-            <Home size={18} /> Back to Dashboard
-          </button>
+          {/* Back button moved to header */}
         </div>
 
         <div className="music-nav-group">
@@ -433,14 +431,19 @@ export default function MusicHome() {
       {/* Main Content */}
       <main className="music-main">
         <header className="music-header">
-          <div className="music-search">
-            <Search size={18} color="var(--text-muted)" />
-            <input 
-              type="text" 
-              placeholder="Search library, artists, songs..." 
-              value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-            />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
+            <button className="icon-back-btn" onClick={() => navigate('/dashboard')} title="Back to Dashboard">
+              <ArrowLeft size={20} />
+            </button>
+            <div className="music-search">
+              <Search size={18} color="var(--text-muted)" />
+              <input 
+                type="text" 
+                placeholder="Search library, artists, songs..." 
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+              />
+            </div>
           </div>
           <div className="music-header-actions">
             <button className="music-back-btn" onClick={handleBackPath} title="Go Back">
@@ -448,6 +451,25 @@ export default function MusicHome() {
             </button>
           </div>
         </header>
+
+        {/* Mobile Navigation (shows under search) */}
+        <div className="mobile-music-nav">
+          <button className={`music-nav-item ${activeTab === 'library' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('library')}>
+            Home
+          </button>
+          <button className={`music-nav-item ${activeTab === 'artists' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('artists')}>
+            Artists
+          </button>
+          <button className={`music-nav-item ${activeTab === 'albums' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('albums')}>
+            Albums
+          </button>
+          <button className={`music-nav-item ${activeTab === 'tracks' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('tracks')}>
+            Tracks
+          </button>
+          <button className={`music-nav-item ${activeTab === 'playlists' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('playlists')}>
+            Playlists
+          </button>
+        </div>
 
         <div className="music-content">
           <div className="music-content-header">

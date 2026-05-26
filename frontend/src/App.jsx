@@ -25,7 +25,7 @@ const ProtectedRoute = ({ children }) => {
 };
 
 import io from 'socket.io-client';
-import { Power, Search, LayoutDashboard, Settings, Plus, Activity, Thermometer, Moon, Sun, Radio, Droplets, Footprints, Wind, Sofa, BedDouble, ChefHat, Monitor, Bath, CarFront, Trees, Home as HomeIcon, Coffee } from 'lucide-react';
+import { Power, Search, LayoutDashboard, Settings, Plus, Activity, Thermometer, Moon, Sun, Radio, Droplets, Footprints, Wind, Sofa, BedDouble, ChefHat, Monitor, Bath, CarFront, Trees, Home as HomeIcon, Coffee, Menu, ArrowLeft, Trash2 } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 
 const getRoomIcon = (roomName) => {
@@ -85,6 +85,7 @@ const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState(null);
   const [curtainMoving, setCurtainMoving] = useState(null);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme');
     return saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -1001,16 +1002,19 @@ const Dashboard = () => {
   const renderDashboard = () => (
     <div className="dashboard-view animate-slide-up">
       <div className="welcome-header">
-        <div className="header-text">
-          <h1>{currentRoom ? currentRoom.name : 'Welcome Home'}</h1>
-          <p>{currentRoom ? `Managing ${devices.filter(d => d.room === (currentRoom ? currentRoom.name : d.room)).length} devices` : 'Everything is under control.'}</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {currentRoom && (
+            <button className="icon-back-btn" onClick={() => setCurrentRoom(null)}>
+              <ArrowLeft size={20} />
+            </button>
+          )}
+          <div className="header-text">
+            <h1>{currentRoom ? currentRoom.name : 'Welcome Home'}</h1>
+            <p>{currentRoom ? `Managing ${devices.filter(d => d.room === (currentRoom ? currentRoom.name : d.room)).length} devices` : 'Everything is under control.'}</p>
+          </div>
         </div>
         <div className="header-actions-group">
-          {currentRoom ? (
-            <button className="action-btn-pill secondary" onClick={() => setCurrentRoom(null)}>
-              <LayoutDashboard size={16} /> Back to Rooms
-            </button>
-          ) : (
+          {!currentRoom && (
             <>
               <button className="action-btn-pill secondary" onClick={() => setIsRoomModalOpen(true)}>
                 <Plus size={18} /> Add Room
@@ -1040,9 +1044,18 @@ const Dashboard = () => {
                 <div className="room-card glass card-hover" onClick={() => setCurrentRoom(room)}>
                   <div className="room-card-header">
                     <span className="room-card-icon">{getRoomIcon(room.name)}</span>
-                    <div className={`status-pill ${activeCount > 0 ? 'active' : ''}`}>
-                      {activeCount > 0 && <span className="pulse-dot"></span>}
-                      {activeCount} Active
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div className={`status-pill ${activeCount > 0 ? 'active' : ''}`}>
+                        {activeCount > 0 && <span className="pulse-dot"></span>}
+                        {activeCount} Active
+                      </div>
+                      <button
+                        className="room-delete-btn"
+                        title="Delete Room"
+                        onClick={(e) => { e.stopPropagation(); handleRemoveRoom(room.name); }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </div>
                   <div className="room-card-body">
@@ -1245,19 +1258,35 @@ const Dashboard = () => {
     </div>
   );
 
+  // Unified navigation handler
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    setSelectedDevice(null);
+    setSearchQuery('');
+    setConfiguringDevice(null);
+    setIsModalOpen(false);
+    setIsRoomModalOpen(false);
+    setIsSensorModalOpen(false);
+  };
+
   return (
     <div className="app-container">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <Sidebar activeTab={activeTab} setActiveTab={handleTabChange} isMobileOpen={isMobileSidebarOpen} onMobileClose={() => setIsMobileSidebarOpen(false)} />
       <main className="content">
         <header className="top-bar glass">
-          <div className="search-bar">
-            <Search size={18} color="var(--text-muted)" />
-            <input
-              type="text"
-              placeholder="Search devices, rooms..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          <div className="top-bar-left">
+            <button className="mobile-menu-toggle" onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}>
+              <Menu size={24} color="var(--text-muted)" />
+            </button>
+            <div className="search-bar">
+              <Search size={18} color="var(--text-muted)" />
+              <input
+                type="text"
+                placeholder="Search devices, rooms..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
           </div>
           <div className="status-chips">
             <button className="theme-toggle-btn" onClick={() => setIsDarkMode(!isDarkMode)}>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { LayoutDashboard, Layers, Radio, Cpu, Settings, PanelLeftClose, PanelLeftOpen, AlignEndHorizontal, LogOut, Speaker } from 'lucide-react';
 
-const Sidebar = ({ activeTab, setActiveTab }) => {
+const Sidebar = ({ activeTab, setActiveTab, isMobileOpen, onMobileClose }) => {
   const [collapsed, setCollapsed] = useState(false);
 
   const menuItems = [
@@ -15,7 +15,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
   ];
 
   return (
-    <div className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
+    <div className={`sidebar ${collapsed ? 'collapsed' : ''} ${isMobileOpen ? 'mobile-open' : ''}`}>
       <div className="sidebar-header">
         <div className="logo">
           <span className="logo-icon">⚡</span>
@@ -34,7 +34,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
           <button
             key={item.id}
             className={`nav-item ${activeTab === item.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(item.id)}
+            onClick={() => { setActiveTab(item.id); if (onMobileClose) onMobileClose(); }}
             title={collapsed ? item.label : ''}
           >
             <span className="nav-icon">{item.icon}</span>
