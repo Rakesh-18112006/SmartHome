@@ -70,7 +70,7 @@ app.get('/api/ha/image', async (req, res) => {
     
     let targetUrl = url;
     if (url.startsWith('/')) {
-      let baseUrl = 'http://192.168.0.168:8123';
+      let baseUrl = 'http://192.168.0.205:8123';
       if (process.env.HA_URL) {
         baseUrl = process.env.HA_URL.replace('ws://', 'http://').replace('wss://', 'https://').split('/api/websocket')[0];
       }

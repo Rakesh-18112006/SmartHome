@@ -1,5 +1,5 @@
 import React from 'react';
-import { Power, Settings, Trash2 } from 'lucide-react';
+
 
 const DeviceCard = ({ title, status, on, icon, type, value, timerRemaining, onToggle, onAction, deviceId = '' }) => {
   const isPureEnergyMonitor = deviceId.startsWith('B1E') || deviceId.startsWith('B3E');
@@ -16,10 +16,10 @@ const DeviceCard = ({ title, status, on, icon, type, value, timerRemaining, onTo
         <div className={`icon-box ${on && !isPureEnergyMonitor ? 'power-on' : (isPureEnergyMonitor ? '' : 'power-off')}`}>{icon}</div>
         <div className="card-actions">
           <button className="action-btn" onClick={(e) => { e.stopPropagation(); onAction('edit'); }} title="Edit">
-            <Settings size={14} />
+            <img src="/icons/icons/Settings-White.svg" alt="Edit" style={{width: 14, height: 14}} />
           </button>
           <button className="action-btn delete" onClick={(e) => { e.stopPropagation(); if (window.confirm(`Remove ${title}?`)) onAction('remove'); }} title="Remove">
-            <Trash2 size={14} />
+            <img src="/icons/icons/Delete-White.svg" alt="Remove" style={{width: 14, height: 14}} />
           </button>
         </div>
       </div>
@@ -63,3 +63,4 @@ const DeviceCard = ({ title, status, on, icon, type, value, timerRemaining, onTo
 };
 
 export default DeviceCard;
+

@@ -1,85 +1,51 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home, Zap, Shield, Smartphone } from 'lucide-react';
+
 
 const LandingPage = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="auth-page">
-      {/* Navbar */}
-      <nav className="auth-nav">
-        <div className="auth-logo-group">
-          <div className="auth-logo-icon">
-            <Home />
-          </div>
-          <span className="auth-logo-text">
-            SmartHome
-          </span>
-        </div>
-        <button
-          onClick={() => navigate('/login')}
-          className="auth-btn-outline"
-        >
-          Login
-        </button>
-      </nav>
+    <div className="auth-page landing-splash-page">
+      <main className="landing-main splash-main">
+        <div className="landing-splash-bg" aria-hidden="true"></div>
+        <div className="landing-splash-overlay" aria-hidden="true"></div>
 
-      {/* Hero Section */}
-      <main className="landing-main">
-        <div className="hero-content">
-          <h1 className="hero-title">
-            Control your home,
-            <br />
-            <span className="hero-title-highlight">
-              effortlessly.
-            </span>
-          </h1>
-          <p className="hero-subtitle">
-            Experience the future of living with our intuitive smart home dashboard. 
-            Automate tasks, monitor sensors, and set the perfect mood with a tap.
-          </p>
-          <div className="pt-4 flex items-center justify-center gap-4">
+        <section className="landing-splash-shell">
+          <div className="splash-content">
+            <p className="splash-kicker">Welcome to</p>
+
+            <div className="splash-brand-block">
+              <div className="splash-brand-icon-wrap">
+                <img src="/icons/icons/companyLogo-dark.png" alt="Bharat Smart Home" className="splash-brand-icon" />
+              </div>
+              <div className="splash-brand-text">
+                <h1>BHARAT</h1>
+                <h2>SMART HOME</h2>
+              </div>
+            </div>
+
             <button
               onClick={() => navigate('/login')}
-              className="hero-btn"
+              className="hero-btn splash-login-btn"
             >
-              Get Started <Zap className="w-4 h-4" />
+              Get Started
             </button>
-          </div>
-        </div>
 
-        {/* Feature Grid */}
-        <div className="features-grid">
-          <FeatureCard 
-            icon={<Zap />}
-            title="Instant Control"
-            desc="Control lights, media, and climate in real-time."
-          />
-          <FeatureCard 
-            icon={<Shield />}
-            title="Secure & Private"
-            desc="Your data stays locally on your network with secure access."
-          />
-          <FeatureCard 
-            icon={<Smartphone />}
-            title="Anywhere Access"
-            desc="Responsive design works beautifully on any device."
-          />
-        </div>
+            <div className="splash-copy-block">
+              <p className="splash-copy">
+                Step into a smarter home experience built for comfort, control, and elegant everyday automation.
+              </p>
+              <p className="splash-copy secondary">
+                Manage rooms, monitor sensors, and trigger scenes instantly from one beautifully connected dashboard.
+              </p>
+            </div>
+          </div>
+        </section>
       </main>
     </div>
   );
 };
 
-const FeatureCard = ({ icon, title, desc }) => (
-  <div className="feature-card">
-    <div className="feature-icon-wrapper">
-      {icon}
-    </div>
-    <h3 className="feature-title">{title}</h3>
-    <p className="feature-desc">{desc}</p>
-  </div>
-);
-
 export default LandingPage;
+

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, Tag, Link, MapPin, Activity, Info } from 'lucide-react';
+
+
 
 const AddSensorModal = ({ isOpen, onClose, onAdd, rooms }) => {
   const [formData, setFormData] = useState({
@@ -25,10 +26,10 @@ const AddSensorModal = ({ isOpen, onClose, onAdd, rooms }) => {
           <div className="header-bg-glow"></div>
           <div className="header-content-top">
             <div className="header-icon-circle">
-              <Activity size={20} />
+              <img src="/icons/icons/Insight-White.svg" alt="Activity" style={{width: 20, height: 20}} />
             </div>
             <button className="close-pill-btn" onClick={onClose}>
-              <X size={16} />
+              <img src="/icons/icons/Close-White.svg" alt="Close" style={{width: 16, height: 16}} />
             </button>
           </div>
           <div className="header-text-bottom">
@@ -40,7 +41,7 @@ const AddSensorModal = ({ isOpen, onClose, onAdd, rooms }) => {
         <form onSubmit={handleSubmit} className="premium-form-body">
           <div className="form-section">
             <div className="input-field-wrapper">
-              <label><Tag size={12} /> Sensor Name</label>
+              <label><img src="/icons/icons/Edit.svg" alt="Tag" style={{width: 12, height: 12}} /> Sensor Name</label>
               <input 
                 type="text" 
                 required
@@ -51,11 +52,11 @@ const AddSensorModal = ({ isOpen, onClose, onAdd, rooms }) => {
             </div>
 
             <div className="input-field-wrapper">
-              <label><Link size={12} /> MQTT Topic</label>
+              <label><img src="/icons/icons/Connect.svg" alt="Link" style={{width: 12, height: 12}} /> MQTT Topic</label>
               <input 
                 type="text" 
                 required
-                placeholder="smarthome/sensors/topic"
+                placeholder="smart_home/sensors/topic"
                 value={formData.topic}
                 onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
               />
@@ -63,7 +64,7 @@ const AddSensorModal = ({ isOpen, onClose, onAdd, rooms }) => {
 
             <div className="form-grid-2">
               <div className="input-field-wrapper">
-                <label><Info size={12} /> Unit</label>
+                <label><img src="/icons/icons/Notification.svg" alt="Info" style={{width: 12, height: 12}} /> Unit</label>
                 <input 
                   type="text" 
                   placeholder="kg, °C, %"
@@ -72,7 +73,7 @@ const AddSensorModal = ({ isOpen, onClose, onAdd, rooms }) => {
                 />
               </div>
               <div className="input-field-wrapper">
-                <label><MapPin size={12} /> Room</label>
+                <label><img src="/icons/icons/Home.svg" alt="Room" style={{width: 12, height: 12}} /> Room</label>
                 <select 
                   className="premium-select"
                   value={formData.room}
@@ -243,14 +244,11 @@ const AddSensorModal = ({ isOpen, onClose, onAdd, rooms }) => {
           }
 
           @media (max-width: 768px) {
-            .modal-overlay {
-              align-items: flex-end;
-              padding: 0;
-            }
             .premium-sensor-modal {
-              max-width: 100% !important;
-              border-radius: 24px 24px 0 0 !important;
-              margin: 0;
+              width: 90% !important;
+              max-width: 440px !important;
+              border-radius: var(--radius-lg) !important;
+              margin: auto;
               max-height: 90dvh;
               overflow-y: auto;
             }
@@ -277,3 +275,4 @@ const AddSensorModal = ({ isOpen, onClose, onAdd, rooms }) => {
 };
 
 export default AddSensorModal;
+

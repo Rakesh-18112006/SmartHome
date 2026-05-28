@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Zap, Sun, Wifi } from 'lucide-react';
+
 
 const DeviceStatus = ({ status, mqttStatus }) => {
   const isOnline = mqttStatus === 'Connected';
@@ -7,21 +7,21 @@ const DeviceStatus = ({ status, mqttStatus }) => {
 
   return (
     <div className="card">
-      <h2><Activity size={24} /> Device Status</h2>
+      <h2><img src="/icons/icons/Insight-White.svg" alt="Activity" style={{width: 24, height: 24}} /> Device Status</h2>
       
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ color: 'var(--text-secondary)' }}>Connection</span>
           <div className={`status-badge ${isOnline ? 'status-online' : 'status-offline'}`}>
-            <Wifi size={14} /> {mqttStatus}
+            <img src="/icons/icons/WIFI-White.svg" alt="Wifi" style={{width: 14, height: 14}} /> {mqttStatus}
           </div>
         </div>
 
-        <div className="card" style={{ padding: '1rem', background: 'rgba(0,0,0,0.1)', border: 'none' }}>
+        <div className="card" style={{ padding: '1rem', background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div style={{ textAlign: 'center' }}>
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
-                <Zap size={14} style={{ marginRight: '4px' }} /> STATE
+                <img src="/icons/icons/Power-White.svg" alt="Zap" style={{width: 14, height: 14, marginRight: '4px'}} /> STATE
               </div>
               <div style={{ fontSize: '1.25rem', fontWeight: '700', color: data.state === 'ON' ? 'var(--success)' : 'var(--text-secondary)' }}>
                 {data.state || 'UNKNOWN'}
@@ -29,7 +29,7 @@ const DeviceStatus = ({ status, mqttStatus }) => {
             </div>
             <div style={{ textAlign: 'center' }}>
               <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
-                <Sun size={14} style={{ marginRight: '4px' }} /> BRIGHTNESS
+                <img src="/icons/icons/Theme.svg" alt="Brightness" style={{width: 14, height: 14, marginRight: '4px'}} /> BRIGHTNESS
               </div>
               <div style={{ fontSize: '1.25rem', fontWeight: '700' }}>
                 {data.brightness !== undefined ? `${Math.round((data.brightness / 255) * 100)}%` : '--'}
@@ -60,3 +60,4 @@ const DeviceStatus = ({ status, mqttStatus }) => {
 };
 
 export default DeviceStatus;
+

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Home, Lock, User, ArrowRight, Loader2, ArrowLeft } from 'lucide-react';
+
 
 const API_BASE = `http://${window.location.hostname}:3000`;
 
@@ -25,7 +25,7 @@ const LoginPage = () => {
       if (!res.ok) throw new Error(data.message || 'Login failed');
       
       localStorage.setItem('smarthome_token', data.token);
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -40,7 +40,7 @@ const LoginPage = () => {
         onClick={() => navigate('/')}
         className="back-btn"
       >
-        <ArrowLeft className="w-5 h-5" />
+        <img src="/icons/icons/Left-White.svg" alt="Back" style={{width: 20, height: 20}} />
         <span>Back to Home</span>
       </button>
 
@@ -48,7 +48,7 @@ const LoginPage = () => {
       <div className="login-card">
         <div className="login-header">
           <div className="login-icon-wrapper">
-            <Lock />
+            <img src="/icons/icons/company-logo-dark.png" alt="SmartHome" className="login-brand-icon" />
           </div>
           <h2 className="login-title">Welcome Back</h2>
           <p className="login-subtitle">Enter your credentials to access your home.</p>
@@ -65,7 +65,7 @@ const LoginPage = () => {
             <label className="form-label">Username or Phone</label>
             <div className="input-wrapper">
               <div className="input-icon">
-                <User />
+                <img src="/icons/icons/Profile.svg" alt="User" style={{width: 20, height: 20}} />
               </div>
               <input 
                 type="text" 
@@ -82,7 +82,7 @@ const LoginPage = () => {
             <label className="form-label">Password</label>
             <div className="input-wrapper">
               <div className="input-icon">
-                <Lock />
+                <img src="/icons/icons/Profile.svg" alt="Lock" style={{width: 24, height: 24}} />
               </div>
               <input 
                 type="password" 
@@ -101,9 +101,9 @@ const LoginPage = () => {
             className="submit-btn"
           >
             {loading ? (
-              <Loader2 className="w-5 h-5 spin-icon" />
+              <img src="/icons/icons/Timer-White.svg" alt="Loading" className="spin-icon" style={{width: 20, height: 20}} />
             ) : (
-              <>Sign In <ArrowRight className="w-5 h-5" /></>
+              <>Sign In <img src="/icons/icons/Right-White.svg" alt="Go" style={{width: 20, height: 20}} /></>
             )}
           </button>
         </form>
@@ -113,3 +113,4 @@ const LoginPage = () => {
 };
 
 export default LoginPage;
+

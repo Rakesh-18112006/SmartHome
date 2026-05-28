@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trash2, Radio, Clock, Activity, Hash } from 'lucide-react';
+
 
 const SensorCard = ({ sensor, onRemove }) => {
   const formatValue = (val) => {
@@ -41,7 +41,7 @@ const SensorCard = ({ sensor, onRemove }) => {
           <span className="room-label">{sensor.room}</span>
         </div>
         <button className="widget-delete" onClick={() => onRemove(sensor._id)}>
-          <Trash2 size={14} />
+          <img src="/icons/icons/Delete-White.svg" alt="Delete" style={{width: 14, height: 14}} />
         </button>
       </div>
 
@@ -49,7 +49,7 @@ const SensorCard = ({ sensor, onRemove }) => {
         <div className="sensor-title-group">
           <h3>{sensor.name}</h3>
           <div className="topic-pill">
-            <Hash size={10} />
+            <img src="/icons/icons/More-White.svg" alt="#" style={{width: 10, height: 10}} />
             <code>{sensor.topic.split('/').pop()}</code>
           </div>
         </div>
@@ -60,18 +60,18 @@ const SensorCard = ({ sensor, onRemove }) => {
             <span className="unit-label">{sensor.unit || ''}</span>
           </div>
           <div className="visual-indicator">
-            <Activity size={24} className={isLive ? 'pulse-icon' : ''} />
+            <img src="/icons/icons/Insight-White.svg" alt="Activity" className={isLive ? 'pulse-icon' : ''} style={{width: 24, height: 24}} />
           </div>
         </div>
       </div>
 
       <div className="widget-footer">
         <div className="update-status">
-          <Clock size={12} />
+          <img src="/icons/icons/Timer-White.svg" alt="Clock" style={{width: 12, height: 12}} />
           <span>{getTimeAgo(sensor.lastUpdated)}</span>
         </div>
         <div className="sensor-type-icon">
-          <Radio size={16} />
+          <img src="/icons/icons/WIFI-White.svg" alt="Radio" style={{width: 16, height: 16}} />
         </div>
       </div>
     </div>
@@ -79,3 +79,4 @@ const SensorCard = ({ sensor, onRemove }) => {
 };
 
 export default SensorCard;
+

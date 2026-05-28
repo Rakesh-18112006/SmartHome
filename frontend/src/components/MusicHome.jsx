@@ -160,6 +160,13 @@ export default function MusicHome() {
   // Queue UI state
   const [showQueue, setShowQueue] = useState(false);
   const [localQueue, setLocalQueue] = useState([]);
+  const libraryTabs = [
+    { id: 'library', label: 'Home', icon: Library },
+    { id: 'artists', label: 'Artists', icon: Mic2 },
+    { id: 'albums', label: 'Albums', icon: Disc3 },
+    { id: 'tracks', label: 'Tracks', icon: Music2 },
+    { id: 'playlists', label: 'Playlists', icon: ListMusic },
+  ];
 
   // Update progress bar smoothly
   useEffect(() => {
@@ -410,21 +417,11 @@ export default function MusicHome() {
 
         <div className="music-nav-group">
           <div className="music-nav-label">Library</div>
-          <button className={`music-nav-item ${activeTab === 'library' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('library')}>
-            <Library size={18} /> Home
-          </button>
-          <button className={`music-nav-item ${activeTab === 'artists' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('artists')}>
-            <Mic2 size={18} /> Artists
-          </button>
-          <button className={`music-nav-item ${activeTab === 'albums' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('albums')}>
-            <Disc3 size={18} /> Albums
-          </button>
-          <button className={`music-nav-item ${activeTab === 'tracks' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('tracks')}>
-            <Music2 size={18} /> Tracks
-          </button>
-          <button className={`music-nav-item ${activeTab === 'playlists' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('playlists')}>
-            <ListMusic size={18} /> Playlists
-          </button>
+          {libraryTabs.map(({ id, label, icon: Icon }) => (
+            <button key={id} className={`music-nav-item ${activeTab === id && !searchQuery ? 'active' : ''}`} onClick={() => loadTab(id)}>
+              <Icon size={18} /> {label}
+            </button>
+          ))}
         </div>
       </aside>
 
@@ -432,7 +429,7 @@ export default function MusicHome() {
       <main className="music-main">
         <header className="music-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
-            <button className="icon-back-btn" onClick={() => navigate('/dashboard')} title="Back to Dashboard">
+            <button className="icon-back-btn" onClick={handleBackPath} title="Go Back">
               <ArrowLeft size={20} />
             </button>
             <div className="music-search">
@@ -446,29 +443,15 @@ export default function MusicHome() {
             </div>
           </div>
           <div className="music-header-actions">
-            <button className="music-back-btn" onClick={handleBackPath} title="Go Back">
-              <ArrowLeft size={20} />
-            </button>
           </div>
         </header>
 
-        {/* Mobile Navigation (shows under search) */}
-        <div className="mobile-music-nav">
-          <button className={`music-nav-item ${activeTab === 'library' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('library')}>
-            Home
-          </button>
-          <button className={`music-nav-item ${activeTab === 'artists' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('artists')}>
-            Artists
-          </button>
-          <button className={`music-nav-item ${activeTab === 'albums' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('albums')}>
-            Albums
-          </button>
-          <button className={`music-nav-item ${activeTab === 'tracks' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('tracks')}>
-            Tracks
-          </button>
-          <button className={`music-nav-item ${activeTab === 'playlists' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('playlists')}>
-            Playlists
-          </button>
+        <div className="music-top-tabs">
+          {libraryTabs.map(({ id, label }) => (
+            <button key={id} className={`music-nav-item ${activeTab === id && !searchQuery ? 'active' : ''}`} onClick={() => loadTab(id)}>
+              {label}
+            </button>
+          ))}
         </div>
 
         <div className="music-content">

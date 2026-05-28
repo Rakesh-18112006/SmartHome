@@ -1,5 +1,5 @@
 import { WebSocket } from 'ws';
-const ws = new WebSocket('ws://192.168.0.168:8123/api/websocket');
+const ws = new WebSocket('ws://192.168.0.205:8123/api/websocket');
 let id = 1;
 
 ws.on('open', () => {

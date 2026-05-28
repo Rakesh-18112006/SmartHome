@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, Speaker, Music2 } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import './AudioDevices.css';
 
@@ -56,7 +56,7 @@ const AudioDevicesTab = ({ socket, allMediaPlayers }) => {
     <div className="audio-devices-view p-8">
       <div className="audio-devices-header mb-8">
         <h2 className="text-3xl font-bold text-white flex items-center gap-3">
-          <Speaker size={32} className="text-[var(--primary)]" />
+          <img src="/icons/devices/audio.png" alt="Audio" style={{width: 32, height: 32, objectFit: 'contain'}} />
           Audio Devices
         </h2>
         <p className="text-[var(--text-muted)] mt-2">Manage all available audio devices on your network.</p>
@@ -77,7 +77,7 @@ const AudioDevicesTab = ({ socket, allMediaPlayers }) => {
                 <img src={player.albumArt} alt="Album Art" />
               ) : (
                 <div className="audio-device-art-placeholder">
-                  <Music2 size={48} className="text-[var(--text-muted)] opacity-50" />
+                  <img src="/icons/devices/audio.png" alt="Music" style={{width: 48, height: 48, objectFit: 'contain', opacity: 0.5}} />
                 </div>
               )}
             </div>
