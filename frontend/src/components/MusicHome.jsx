@@ -404,26 +404,6 @@ export default function MusicHome() {
   }, [activePlayer.mediaTitle]);
   return (
     <div className="music-app">
-      {/* Sidebar */}
-      <aside className="music-sidebar">
-        <div className="music-sidebar-header">
-          <Music2 size={24} color="var(--primary)" />
-          <h2>Music</h2>
-        </div>
-        
-        <div className="music-nav-group">
-          {/* Back button moved to header */}
-        </div>
-
-        <div className="music-nav-group">
-          <div className="music-nav-label">Library</div>
-          {libraryTabs.map(({ id, label, icon: Icon }) => (
-            <button key={id} className={`music-nav-item ${activeTab === id && !searchQuery ? 'active' : ''}`} onClick={() => loadTab(id)}>
-              <Icon size={18} /> {label}
-            </button>
-          ))}
-        </div>
-      </aside>
 
       {/* Main Content */}
       <main className="music-main">

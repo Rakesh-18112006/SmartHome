@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 
 import './Scenes.css';
 import AddRoomModal from './AddRoomModal';
@@ -116,7 +116,7 @@ const clampBrightnessValue = (value) => {
 const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
   const [rules, setRules] = useState([]);
   const [sensorData, setSensorData] = useState({ temperature: 25, humidity: 50, lux: 0, motion: false });
-  const [availableSensors, setAvailableSensors] = useState(['temperature', 'humidity', 'lux', 'motion']);
+  const [allSensors, setAllSensors] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState(null);
   const [toast, setToast] = useState(null);
@@ -149,8 +149,7 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
     try {
       const res = await fetchWithAuth(API_SENSORS);
       const data = await res.json();
-      const customNames = (Array.isArray(data) ? data : []).map(s => s.name);
-      setAvailableSensors(['temperature', 'humidity', 'lux', 'motion', ...customNames]);
+      setAllSensors(Array.isArray(data) ? data : []);
     } catch (e) { console.error('Fetch sensors error:', e); }
   }, []);
 
@@ -314,6 +313,16 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
   };
 
   const selectedRuleRoom = currentRoom?.name || form.room || 'Global';
+  const selectedRuleType = form.type || 'device';
+
+  // Compute available sensors dynamically based on selected room
+  const filteredSensorNames = useMemo(() => {
+    let filtered = allSensors;
+    if (selectedRuleRoom !== 'Global') {
+      filtered = filtered.filter(s => s.room === selectedRuleRoom);
+    }
+    return [...new Set(filtered.map(s => s.name).filter(Boolean))];
+  }, [allSensors, selectedRuleRoom]);
 
   const actionableDevices = (Array.isArray(allDevices) ? allDevices : []).filter((device) => {
     if (device?.isConfigured === false) return false;
@@ -687,9 +696,11 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
                 {form.conditions.map((c, i) => (
                   <div className="item-card scene-item-card" key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: '10px', border: '1px solid var(--border)' }}>
                     <div className="item-controls scene-condition-controls">
-                      <select className="premium-select" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px' }} value={c.sensor} onChange={e => updateCond(i, 'sensor', e.target.value)}>
-                        {availableSensors.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
+                        <select className="premium-select" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px' }} value={c.sensor} onChange={e => updateCond(i, 'sensor', e.target.value)}>
+                          {filteredSensorNames.length > 0 
+                            ? filteredSensorNames.map(s => <option key={s} value={s}>{s}</option>)
+                            : <option value="" disabled>No sensors found</option>}
+                        </select>
                       <select className="premium-select" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px' }} value={c.operator} onChange={e => updateCond(i, 'operator', e.target.value)}>
                         {Object.entries(OPS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                       </select>

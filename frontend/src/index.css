@@ -1422,6 +1422,10 @@ button:active {
   color: var(--primary);
 }
 
+[data-theme='dark'] .theme-toggle-btn img {
+  filter: brightness(0) invert(1);
+}
+
 /* Action Buttons & Utilities */
 .action-btn-pill {
   display: flex;

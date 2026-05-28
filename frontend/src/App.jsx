@@ -365,14 +365,17 @@ const Dashboard = () => {
         };
 
         if (existingIndex >= 0) {
-          // Update existing, but preserve custom DB properties
+          // If the device is purely from HA and hasn't been custom-edited in our DB, we should let HA dictate the room and title.
+          // We can check if it's missing from our 'devices' DB array to know if it's purely HA.
+          // For now, if it's an HA device, just prefer the HA mapped properties over the old ones if the old ones were "Unassigned".
           const updated = [...list];
+          const preferHA = mappedDevice.isHomeAssistant;
           updated[existingIndex] = { 
             ...updated[existingIndex], 
             ...mappedDevice,
-            title: updated[existingIndex].isConfigured ? updated[existingIndex].title : mappedDevice.title,
-            room: updated[existingIndex].isConfigured ? updated[existingIndex].room : mappedDevice.room,
-            icon: updated[existingIndex].isConfigured ? updated[existingIndex].icon : mappedDevice.icon,
+            title: preferHA ? mappedDevice.title : (updated[existingIndex].isConfigured ? updated[existingIndex].title : mappedDevice.title),
+            room: preferHA ? mappedDevice.room : (updated[existingIndex].isConfigured ? updated[existingIndex].room : mappedDevice.room),
+            icon: preferHA ? mappedDevice.icon : (updated[existingIndex].isConfigured ? updated[existingIndex].icon : mappedDevice.icon),
             isConfigured: updated[existingIndex].isConfigured 
           };
           return updated;
@@ -671,12 +674,12 @@ const Dashboard = () => {
 
     return (
       <div className="detail-view animate-slide-up">
-        <header className="detail-header">
-          <button className="back-btn glass" onClick={closeDeviceWithHistory}>
-            <img src="/icons/icons/Home.svg" style={{width: 18, height: 18}} /> Back
-          </button>
+        <header className="detail-header" style={{ marginBottom: '16px' }}>
           <div className="title-row">
             <div className="title-left">
+              <button className="icon-back-btn" onClick={closeDeviceWithHistory} style={{ margin: 0 }}>
+                <img src="/icons/icons/Arrow-White.svg" style={{width: 20, height: 20, transform: 'scaleX(-1)'}} />
+              </button>
               <span className="device-icon-large">
                 <img
                   src={getDeviceIconSrc(selectedDevice)}
@@ -1022,7 +1025,7 @@ const Dashboard = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           {currentRoom && (
             <button className="icon-back-btn" onClick={handleBackNavigation}>
-              <img src="/icons/icons/Arrow-White.svg" style={{width: 20, height: 20}} />
+              <img src="/icons/icons/Arrow-White.svg" style={{width: 20, height: 20, transform: 'scaleX(-1)'}} />
             </button>
           )}
           <div className="header-text">

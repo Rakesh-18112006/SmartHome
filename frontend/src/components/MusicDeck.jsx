@@ -30,8 +30,7 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
   const [currentProgress, setCurrentProgress] = useState(0);
   const isSeeking = useRef(false);
 
-  if (!players || players.length === 0) return null;
-
+  // Early return moved below hooks
   // Find active player for controls
   let activePlayerRaw = players.find(p => p.deviceId === selectedId);
   const allPlayers = allMediaPlayers || players;
@@ -315,6 +314,8 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
       </div>
     );
   };
+
+  if (!players || players.length === 0) return null;
 
   return (
     <div className="music-deck-container animate-slide-up" style={{ marginBottom: '24px' }}>
