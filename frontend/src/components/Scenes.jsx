@@ -17,7 +17,7 @@ const ICONS = [
   { id: 'notif', icon: <img src="/icons/icons/Notification.svg" alt="Alert" style={{width: 20, height: 20}} />, label: '🔔' }
 ];
 
-const EMPTY_COND = { sensor: 'temperature', operator: 'gt', value: 30 };
+const EMPTY_COND = { sensor: 'temperature', operator: 'gt', value: 30, startTime: '', endTime: '' };
 const EMPTY_ACTION = { targetDeviceId: '', targetDevice: '', command: 'turn_on', subDeviceIndex: null, params: {} };
 
 const DEVICE_COMMANDS = {
@@ -695,19 +695,26 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
               <div className="items-list" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {form.conditions.map((c, i) => (
                   <div className="item-card scene-item-card" key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-main)', padding: '6px 10px', borderRadius: '10px', border: '1px solid var(--border)' }}>
-                    <div className="item-controls scene-condition-controls">
-                        <select className="premium-select" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px' }} value={c.sensor} onChange={e => updateCond(i, 'sensor', e.target.value)}>
-                          {filteredSensorNames.length > 0 
-                            ? filteredSensorNames.map(s => <option key={s} value={s}>{s}</option>)
-                            : <option value="" disabled>No sensors found</option>}
+                    <div className="scene-condition-wrapper" style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
+                      <div className="item-controls scene-condition-controls">
+                          <select className="premium-select" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px' }} value={c.sensor} onChange={e => updateCond(i, 'sensor', e.target.value)}>
+                            {filteredSensorNames.length > 0 
+                              ? filteredSensorNames.map(s => <option key={s} value={s}>{s}</option>)
+                              : <option value="" disabled>No sensors found</option>}
+                          </select>
+                        <select className="premium-select" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px' }} value={c.operator} onChange={e => updateCond(i, 'operator', e.target.value)}>
+                          {Object.entries(OPS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                         </select>
-                      <select className="premium-select" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px' }} value={c.operator} onChange={e => updateCond(i, 'operator', e.target.value)}>
-                        {Object.entries(OPS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                      </select>
-                      <input className="premium-input" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px', width: '100%', border: '1.5px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', outline: 'none' }} type="number" value={c.value} onChange={e => updateCond(i, 'value', e.target.value)} />
+                        <input className="premium-input" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px', border: '1.5px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', outline: 'none' }} type="number" value={c.value} onChange={e => updateCond(i, 'value', e.target.value)} />
+                      </div>
+                      <div className="item-controls scene-condition-time-controls">
+                        <input className="premium-input" type="time" title="Start Time (Optional)" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px', border: '1.5px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', outline: 'none' }} value={c.startTime || ''} onChange={e => updateCond(i, 'startTime', e.target.value)} />
+                        <span style={{ color: 'var(--text-muted)', fontSize: '12px', alignSelf: 'center', textAlign: 'center' }}>to</span>
+                        <input className="premium-input" type="time" title="End Time (Optional)" style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px', border: '1.5px solid var(--border)', background: 'var(--bg-main)', color: 'var(--text-main)', outline: 'none' }} value={c.endTime || ''} onChange={e => updateCond(i, 'endTime', e.target.value)} />
+                      </div>
                     </div>
                     {form.conditions.length > 1 && (
-                      <button type="button" className="close-pill-btn scene-item-remove" style={{ background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', width: '26px', height: '26px' }} onClick={() => removeCond(i)}><img src="/icons/icons/Close-White.svg" alt="Close" style={{width: 12, height: 12}} /></button>
+                      <button type="button" className="close-pill-btn scene-item-remove" style={{ background: 'rgba(239, 68, 68, 0.08)', color: '#ef4444', width: '26px', height: '26px', flexShrink: 0 }} onClick={() => removeCond(i)}><img src="/icons/icons/Close-White.svg" alt="Close" style={{width: 12, height: 12}} /></button>
                     )}
                   </div>
                 ))}

@@ -2447,7 +2447,7 @@ button:active {
   padding: 40px 32px 32px;
   background: linear-gradient(135deg, var(--primary), #4f46e5);
   color: white;
-  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .header-bg-glow {
