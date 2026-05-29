@@ -1,5 +1,6 @@
 import express from 'express';
 import dns from 'node:dns';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
 // Fix for ENOTFOUND errors on some Windows systems with Node.js 18+
 if (dns.setDefaultResultOrder) {
@@ -56,6 +57,37 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/auth', authRoutes);
+
+import { Readable } from 'stream';
+
+// Native HLS Proxy for Home Assistant cameras
+app.use('/api/hls', async (req, res) => {
+  try {
+    const baseUrl = process.env.HA_URL ? process.env.HA_URL.replace('ws://', 'http://').replace('wss://', 'https://').split('/api/websocket')[0] : 'http://homeassistant.local:8123';
+    const targetUrl = `${baseUrl}${req.originalUrl}`;
+    
+    const haRes = await fetch(targetUrl, {
+      headers: { 'Authorization': `Bearer ${process.env.HA_TOKEN}` }
+    });
+    
+    if (!haRes.ok) {
+      return res.status(haRes.status).send('HA returned error');
+    }
+    
+    const contentType = haRes.headers.get('content-type');
+    if (contentType) res.setHeader('Content-Type', contentType);
+    
+    if (haRes.body) {
+      Readable.fromWeb(haRes.body).pipe(res);
+    } else {
+      res.end();
+    }
+  } catch(e) {
+    console.error('HLS proxy error:', e);
+    res.status(500).send('Proxy error');
+  }
+});
+
 app.use('/', smarthomeRoutes);
 app.use('/api/automations', authMiddleware, automationRoutes);
 app.use('/api/devices', authMiddleware, devicesRoutes);

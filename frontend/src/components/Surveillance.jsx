@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import Hls from 'hls.js';
 import { fetchWithAuth } from '../App';
 
 const API_BASE = `http://${window.location.hostname}:3000`;
@@ -62,36 +63,117 @@ const Surveillance = () => {
   const CameraFeed = ({ camera, isExpanded = false }) => {
     const [streamError, setStreamError] = useState(false);
     const [useStream, setUseStream] = useState(true);
-    const imgRef = useRef(null);
+    const videoRef = useRef(null);
+    const hlsRef = useRef(null);
     const retryTimerRef = useRef(null);
+
+    const initHls = useCallback(async () => {
+      if (!videoRef.current) return;
+      
+      try {
+        // Fetch the actual HLS playlist URL from our backend
+        const hlsRes = await fetchWithAuth(`${API_BASE}${camera.hls_proxy_url}`);
+        if (!hlsRes.ok) throw new Error('Failed to get HLS URL');
+        const data = await hlsRes.json();
+        
+        if (!data.hls_url) throw new Error('No HLS URL returned');
+        
+        const videoSrc = `${API_BASE}${data.hls_url}`;
+        
+        if (Hls.isSupported()) {
+          if (hlsRef.current) {
+            hlsRef.current.destroy();
+          }
+          const hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 90
+          });
+          hlsRef.current = hls;
+          
+          hls.loadSource(videoSrc);
+          hls.attachMedia(videoRef.current);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            videoRef.current.play().catch(e => console.log('Autoplay prevented', e));
+          });
+          
+          hls.on(Hls.Events.ERROR, (event, data) => {
+            if (data.fatal) {
+              console.error('[HLS] Fatal error:', data.type);
+              switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  // Only try to recover once, then fail to trigger "Reconnecting..." overlay
+                  if (hls.networkErrorRecovered) {
+                    handleStreamError();
+                  } else {
+                    hls.networkErrorRecovered = true;
+                    hls.startLoad();
+                  }
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  if (hls.mediaErrorRecovered) {
+                    handleStreamError();
+                  } else {
+                    hls.mediaErrorRecovered = true;
+                    hls.recoverMediaError();
+                  }
+                  break;
+                default:
+                  handleStreamError();
+                  break;
+              }
+            }
+          });
+        } else if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+          // Safari native HLS support
+          videoRef.current.src = videoSrc;
+          videoRef.current.addEventListener('loadedmetadata', () => {
+            videoRef.current.play().catch(e => console.log('Autoplay prevented', e));
+          });
+        }
+      } catch (err) {
+        console.error('Failed to init HLS for', camera.entity_id, err);
+        handleStreamError();
+      }
+    }, [camera]);
 
     const handleStreamError = useCallback(() => {
       setStreamError(true);
       setUseStream(false);
-      // Retry stream after 10 seconds
+      if (hlsRef.current) hlsRef.current.destroy();
+      
+      // Retry stream after 15 seconds
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       retryTimerRef.current = setTimeout(() => {
         setStreamError(false);
         setUseStream(true);
-      }, 10000);
-    }, []);
+        initHls();
+      }, 15000);
+    }, [initHls]);
 
     useEffect(() => {
+      if (useStream) {
+        initHls();
+      }
       return () => {
+        if (hlsRef.current) {
+          hlsRef.current.destroy();
+          hlsRef.current = null;
+        }
         if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       };
-    }, []);
+    }, [useStream, initHls]);
 
     const refreshSnapshot = useCallback(() => {
-      if (imgRef.current && !useStream) {
-        imgRef.current.src = getSnapshotUrl(camera);
+      if (videoRef.current && !useStream && videoRef.current.tagName === 'IMG') {
+        videoRef.current.src = getSnapshotUrl(camera);
       }
     }, [camera, useStream]);
 
-    // Auto-refresh snapshots every 2 seconds when not streaming
+    // Auto-refresh snapshots every 5 seconds when not streaming
     useEffect(() => {
       if (!useStream) {
-        const interval = setInterval(refreshSnapshot, 2000);
+        const interval = setInterval(refreshSnapshot, 5000);
         return () => clearInterval(interval);
       }
     }, [useStream, refreshSnapshot]);
@@ -108,16 +190,17 @@ const Surveillance = () => {
       >
         <div className="feed-container">
           {useStream ? (
-            <img
-              ref={imgRef}
-              src={getStreamUrl(camera)}
-              alt={camera.name}
+            <video
+              ref={videoRef}
               className="camera-stream"
-              onError={handleStreamError}
+              autoPlay
+              muted
+              playsInline
+              onError={() => handleStreamError()}
             />
           ) : (
             <img
-              ref={imgRef}
+              ref={videoRef} // Resusing the ref for snapshot mode
               src={getSnapshotUrl(camera)}
               alt={camera.name}
               className="camera-stream"
