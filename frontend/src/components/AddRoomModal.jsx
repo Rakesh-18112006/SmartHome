@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
-import { Home, Sofa, BedDouble, ChefHat, Bath, Building, Trees, CarFront, Gamepad2, Lightbulb } from 'lucide-react';
+
 
 const roomIcons = [
-  { id: 'Home', Component: Home, color: '#8b7355' },
-  { id: 'Sofa', Component: Sofa, color: '#3b82f6' },
-  { id: 'BedDouble', Component: BedDouble, color: '#6366f1' },
-  { id: 'ChefHat', Component: ChefHat, color: '#f59e0b' },
-  { id: 'Bath', Component: Bath, color: '#06b6d4' },
-  { id: 'Building', Component: Building, color: '#94a3b8' },
-  { id: 'Trees', Component: Trees, color: '#10b981' },
-  { id: 'CarFront', Component: CarFront, color: '#64748b' },
-  { id: 'Gamepad2', Component: Gamepad2, color: '#8b5cf6' },
-  { id: 'Lightbulb', Component: Lightbulb, color: '#eab308' },
+  { id: 'Home', name: 'Other', src: '/icons/icons/rooms_icons/Other.svg' },
+  { id: 'Sofa', name: 'Living Room', src: '/icons/icons/rooms_icons/LivingRoom.svg' },
+  { id: 'Bed', name: 'Bedroom', src: '/icons/icons/rooms_icons/MasterBedRoom.svg' },
+  { id: 'ChefHat', name: 'Kitchen', src: '/icons/icons/rooms_icons/Kitchen.svg' },
+  { id: 'Bath', name: 'Bathroom', src: '/icons/icons/rooms_icons/BathRoom.svg' },
+  { id: 'Building', name: 'Hall', src: '/icons/icons/rooms_icons/Hall.svg' },
+  { id: 'Trees', name: 'Balcony', src: '/icons/icons/rooms_icons/Balcony.svg' },
+  { id: 'Car', name: 'Garage', src: '/icons/icons/rooms_icons/Other.svg' },
+  { id: 'Gamepad', name: 'Theatre', src: '/icons/icons/rooms_icons/HomeTheatre.svg' },
+  { id: 'Lightbulb', name: 'Study', src: '/icons/icons/rooms_icons/StudyRoom.svg' },
 ];
 
 const AddRoomModal = ({ isOpen, onClose, onAdd }) => {
@@ -50,14 +50,15 @@ const AddRoomModal = ({ isOpen, onClose, onAdd }) => {
           <div className="form-group">
             <label>Room Icon</label>
             <div className="icon-selector">
-              {roomIcons.map(({ id, Component, color }) => (
+              {roomIcons.map(({ id, name, src }) => (
                 <button
                   key={id}
                   type="button"
                   className={`icon-btn ${formData.icon === id ? 'active' : ''}`}
                   onClick={() => setFormData({ ...formData, icon: id })}
                 >
-                  <Component size={20} style={{ color: formData.icon === id ? '#fff' : color }} />
+                  <img src={src} alt={name} style={{ width: 36, height: 36, filter: formData.icon === id ? 'brightness(10)' : 'none' }} />
+                  <span className="icon-label">{name}</span>
                 </button>
               ))}
             </div>
@@ -104,10 +105,12 @@ const AddRoomModal = ({ isOpen, onClose, onAdd }) => {
         .form-group input { width: 100%; padding: 10px 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); outline: none; transition: var(--transition); background: var(--bg-main); font-size: 14px; font-weight: 500; color: var(--text-main); }
         .form-group input:focus { border-color: var(--primary); background: var(--bg-card); }
         
-        .icon-selector { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-        .icon-btn { height: 44px; font-size: 20px; background: var(--bg-main); border: 1px solid transparent; border-radius: var(--radius-sm); transition: var(--transition); cursor: pointer; }
+        .icon-selector { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .icon-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px; font-size: 20px; background: var(--bg-main); border: 1px solid transparent; border-radius: var(--radius-sm); transition: var(--transition); cursor: pointer; }
         .icon-btn:hover { background: var(--primary-glow); border-color: var(--primary-glow); }
         .icon-btn.active { background: var(--primary); border-color: var(--primary); box-shadow: 0 4px 12px var(--primary-glow); transform: scale(1.05); }
+        .icon-label { font-size: 10px; font-weight: 600; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; }
+        .icon-btn.active .icon-label { color: white; }
         
         .submit-btn { width: 100%; padding: 12px; background: var(--primary); color: white; border-radius: var(--radius-sm); font-weight: 700; margin-top: 8px; transition: var(--transition); box-shadow: 0 4px 12px var(--primary-glow); font-size: 14px; }
         .submit-btn:hover { transform: translateY(-2px); background: var(--primary-dark); }
@@ -116,15 +119,10 @@ const AddRoomModal = ({ isOpen, onClose, onAdd }) => {
         @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
         @media (max-width: 768px) {
-          .modal-overlay { align-items: flex-end; padding: 0; }
           .modal-content { 
-            width: 100%; 
-            max-width: 100%; 
-            border-radius: 24px 24px 0 0; 
-            padding: 24px 20px 32px; 
-            border-bottom: none; 
-            border-left: none; 
-            border-right: none; 
+            width: 90%; 
+            max-width: 400px; 
+            padding: 24px; 
           }
         }
       `}</style>

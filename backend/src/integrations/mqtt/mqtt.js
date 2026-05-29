@@ -40,7 +40,9 @@ export const connectMQTT = (io) => {
       'smart_home/rgbw/+/status',
       'smart_home/rgbw/+/debug',
       'smarthome/ha/+/command',
-      'smart_home/staircase/trigger'
+      'smart_home/staircase/trigger',
+      'tunable-light/+/light/status',
+      'tunable-light/+/status'
     ]);
 
     // Dynamic boot sync to ensure all devices appear in Home Assistant
@@ -117,6 +119,33 @@ export const connectMQTT = (io) => {
       deviceId = topicParts[1];
     } else if (topicParts[0] === 'smart_home' && topicParts[1] === 'rgbw') {
       deviceId = topicParts[2];
+    } else if (topicParts[0] === 'tunable-light') {
+      deviceId = topicParts[1];
+      let rawVal = undefined;
+      
+      console.log(`[TUNABLE LIGHT] Received status for ${deviceId}. Raw payload:`, payload);
+
+      if (data.type && data.type.toLowerCase() === 'brightness' && data.value !== undefined) {
+        rawVal = Number(data.value);
+      } else if (data.brightness !== undefined) {
+        rawVal = Number(data.brightness);
+      }
+
+      if (rawVal !== undefined) {
+        // Invert from backend scale (0=full, 100=off) to frontend scale (100=full, 0=off)
+        let pct = 100 - rawVal;
+        if (pct < 0) pct = 0;
+        if (pct > 100) pct = 100;
+        
+        // Frontend expects 0-255 scale
+        data.brightness = Math.round((pct / 100) * 255);
+        
+        // Auto-update power state based on brightness
+        data.on = data.brightness > 0;
+        console.log(`[TUNABLE LIGHT] Parsed brightness for ${deviceId}: rawVal=${rawVal} -> pct=${pct}% -> 255scale=${data.brightness}`);
+      } else {
+        console.warn(`[TUNABLE LIGHT] Could not parse brightness from payload for ${deviceId}`);
+      }
     }
 
     if (deviceId && data) {
@@ -209,6 +238,7 @@ export const connectMQTT = (io) => {
         if (data.relayStatus !== undefined) updates.on = data.relayStatus === 'ON';
         if (data.switch !== undefined && Array.isArray(data.switch)) updates.on = data.switch[0] === 1;
         if (data.state !== undefined) updates.on = data.state === 'ON';
+        if (data.on !== undefined) updates.on = data.on;
         
         if (data.effect !== undefined) updates.effect = data.effect;
         if (data.color !== undefined) {
@@ -285,12 +315,14 @@ export const connectMQTT = (io) => {
       if (!global.sensorThrottleMap) global.sensorThrottleMap = new Map();
       const lastUpdate = global.sensorThrottleMap.get(topic) || { value: null, time: 0 };
       
-      // If the value is identical to the last received value, ignore it (filters out presence '1' spam)
       const isDuplicate = lastUpdate.value === sensorVal;
-      // If it's a rapidly fluctuating numeric sensor (like lux), limit updates to max 1 per second
-      const isThrottled = (now - lastUpdate.time) < 1000;
+      const isThrottled = (now - lastUpdate.time) < 1000; // max 1 update per second
 
-      if (!isDuplicate && !isThrottled) {
+      // If it's a duplicate, we STILL want to show it's "alive" in the UI by updating lastUpdated,
+      // but we can throttle the DB saves to every 30 seconds for duplicates to save IO.
+      const shouldSaveToDb = !isThrottled && (!isDuplicate || (now - lastUpdate.time) > 30000);
+
+      if (shouldSaveToDb) {
         global.sensorThrottleMap.set(topic, { value: sensorVal, time: now });
 
         customSensor.value = sensorVal;
@@ -309,44 +341,7 @@ export const connectMQTT = (io) => {
         io.emit('custom_sensor_update', customSensor);
         io.emit('sensor_data_update', getSensorData());
 
-        // --- Custom Presence Music Scene ---
-        if (customSensor.name === 'Presence') {
-          const prevVal = lastUpdate.value;
-          const curVal = sensorVal;
-          const isNowZero = curVal === 0 || curVal === '0' || curVal === false || curVal === 'false';
-          const isNowOne = curVal === 1 || curVal === '1' || curVal === true || curVal === 'true';
-          const wasOne = prevVal === 1 || prevVal === '1' || prevVal === true || prevVal === 'true';
-          const wasZero = prevVal === 0 || prevVal === '0' || prevVal === false || prevVal === 'false' || prevVal === null;
 
-          if (isNowZero && wasOne) {
-            io.emit('toast_message', '🚶 No presence detected — pausing music');
-            // Pause ONLY speakers that are currently playing
-            if (cachedHaStates) {
-              if (!global._presencePausedSpeakers) global._presencePausedSpeakers = [];
-              global._presencePausedSpeakers = [];
-              for (const [id, state] of cachedHaStates.entries()) {
-                if (id.startsWith('media_player.') && state.mediaState === 'playing') {
-                  global._presencePausedSpeakers.push(id);
-                  callService('media_player', 'media_pause', { entity_id: id });
-                }
-              }
-            }
-          } else if (isNowOne && wasZero) {
-            // Resume ONLY the speakers we paused earlier
-            const pausedList = global._presencePausedSpeakers || [];
-            if (pausedList.length > 0) {
-              io.emit('toast_message', '🚶 Presence detected — resuming music');
-              for (const id of pausedList) {
-                callService('media_player', 'volume_set', { entity_id: id, volume_level: 0.1 });
-                callService('media_player', 'media_play', { entity_id: id });
-                // Gentle 3-step fade: 0.1 → 0.3 → 0.6 → original
-                setTimeout(() => callService('media_player', 'volume_set', { entity_id: id, volume_level: 0.3 }), 1500);
-                setTimeout(() => callService('media_player', 'volume_set', { entity_id: id, volume_level: 0.6 }), 3000);
-              }
-              global._presencePausedSpeakers = [];
-            }
-          }
-        }
         // -----------------------------------
 
         try {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, Library, Music2, Disc3, Mic2, ListMusic, Play, Pause, SkipBack, SkipForward, Volume2, ArrowLeft, Loader2, X } from 'lucide-react';
+import { Home, Search, Library, Music2, Disc3, Mic2, ListMusic, Play, Pause, SkipBack, SkipForward, Volume2, ArrowLeft, Loader2, X, Speaker } from 'lucide-react';
 import { socket, fetchWithAuth } from '../App';
 import '../music.css';
 
@@ -33,6 +33,7 @@ export default function MusicHome() {
 
   const [players, setPlayers] = useState([]);
   const [activePlayerId, setActivePlayerId] = useState(null);
+  const [showPlayersPopup, setShowPlayersPopup] = useState(false);
 
   // Setup Socket listener to sync media players (same logic as App.jsx)
   useEffect(() => {
@@ -55,6 +56,7 @@ export default function MusicHome() {
           mediaPositionUpdatedAt: haDevice.raw?.attributes?.media_position_updated_at,
           isMusicAssistant: haDevice.isMusicAssistant || haDevice.raw?.attributes?.app_id === 'music_assistant',
           supportsBrowse: haDevice.supportsBrowse || !!(haDevice.raw?.attributes?.supported_features & 131072),
+          groupMembers: haDevice.raw?.attributes?.group_members || [],
         };
         
         if (idx >= 0) {
@@ -66,12 +68,19 @@ export default function MusicHome() {
       });
     };
 
+    const handleConnect = () => {
+      socket.emit('request_initial_states');
+    };
+
     socket.on('ha_entity_state_change', handleStateChange);
+    socket.on('connect', handleConnect);
     
+    // Request immediately in case we're already connected
     socket.emit('request_initial_states');
 
     return () => {
       socket.off('ha_entity_state_change', handleStateChange);
+      socket.off('connect', handleConnect);
     };
   }, []);
 
@@ -157,9 +166,20 @@ export default function MusicHome() {
   const volumeTimeout = useRef(null);
   const seekTimeout = useRef(null);
   
+  // Optimistic UI states for snappy grouping
+  const [optimisticVolumes, setOptimisticVolumes] = useState({});
+  const [optimisticGroups, setOptimisticGroups] = useState({});
+  
   // Queue UI state
   const [showQueue, setShowQueue] = useState(false);
   const [localQueue, setLocalQueue] = useState([]);
+  const libraryTabs = [
+    { id: 'library', label: 'Home', icon: Library },
+    { id: 'artists', label: 'Artists', icon: Mic2 },
+    { id: 'albums', label: 'Albums', icon: Disc3 },
+    { id: 'tracks', label: 'Tracks', icon: Music2 },
+    { id: 'playlists', label: 'Playlists', icon: ListMusic },
+  ];
 
   // Update progress bar smoothly
   useEffect(() => {
@@ -352,13 +372,64 @@ export default function MusicHome() {
   };
 
   const sendCommand = (service, serviceData = {}) => {
-    if (!activePlayerId) return;
     socket.emit('ha_command', {
       domain: 'media_player',
       service,
-      entityId: activePlayerId,
+      entityId: activePlayer.deviceId,
       serviceData
     });
+  };
+
+  const handleToggleGroupMember = (otherPlayerId, isCurrentlyGrouped) => {
+    if (!socket || !activePlayer.deviceId) return;
+    
+    // Optimistic UI update
+    setOptimisticGroups(prev => ({ ...prev, [otherPlayerId]: !isCurrentlyGrouped }));
+    
+    if (isCurrentlyGrouped) {
+      socket.emit('ha_command', {
+        domain: 'media_player',
+        service: 'unjoin',
+        entityId: otherPlayerId
+      });
+    } else {
+      socket.emit('ha_command', {
+        domain: 'media_player',
+        service: 'join',
+        entityId: activePlayer.deviceId,
+        serviceData: { group_members: [otherPlayerId] }
+      });
+    }
+    
+    // Clear optimistic state after a delay (give HA time to process and sync back)
+    setTimeout(() => {
+      setOptimisticGroups(prev => {
+        const next = { ...prev };
+        delete next[otherPlayerId];
+        return next;
+      });
+    }, 8000);
+  };
+
+  const handleSetPlayerVolume = (targetPlayerId, volPercent) => {
+    if (!socket) return;
+    
+    setOptimisticVolumes(prev => ({ ...prev, [targetPlayerId]: volPercent }));
+    
+    socket.emit('ha_command', {
+      domain: 'media_player',
+      service: 'volume_set',
+      entityId: targetPlayerId,
+      serviceData: { volume_level: volPercent / 100 }
+    });
+    
+    setTimeout(() => {
+      setOptimisticVolumes(prev => {
+        const next = { ...prev };
+        delete next[targetPlayerId];
+        return next;
+      });
+    }, 2000);
   };
 
   const handlePlayPause = () => {
@@ -397,42 +468,12 @@ export default function MusicHome() {
   }, [activePlayer.mediaTitle]);
   return (
     <div className="music-app">
-      {/* Sidebar */}
-      <aside className="music-sidebar">
-        <div className="music-sidebar-header">
-          <Music2 size={24} color="var(--primary)" />
-          <h2>Music</h2>
-        </div>
-        
-        <div className="music-nav-group">
-          {/* Back button moved to header */}
-        </div>
-
-        <div className="music-nav-group">
-          <div className="music-nav-label">Library</div>
-          <button className={`music-nav-item ${activeTab === 'library' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('library')}>
-            <Library size={18} /> Home
-          </button>
-          <button className={`music-nav-item ${activeTab === 'artists' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('artists')}>
-            <Mic2 size={18} /> Artists
-          </button>
-          <button className={`music-nav-item ${activeTab === 'albums' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('albums')}>
-            <Disc3 size={18} /> Albums
-          </button>
-          <button className={`music-nav-item ${activeTab === 'tracks' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('tracks')}>
-            <Music2 size={18} /> Tracks
-          </button>
-          <button className={`music-nav-item ${activeTab === 'playlists' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('playlists')}>
-            <ListMusic size={18} /> Playlists
-          </button>
-        </div>
-      </aside>
 
       {/* Main Content */}
       <main className="music-main">
         <header className="music-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
-            <button className="icon-back-btn" onClick={() => navigate('/dashboard')} title="Back to Dashboard">
+            <button className="icon-back-btn" onClick={handleBackPath} title="Go Back">
               <ArrowLeft size={20} />
             </button>
             <div className="music-search">
@@ -446,29 +487,15 @@ export default function MusicHome() {
             </div>
           </div>
           <div className="music-header-actions">
-            <button className="music-back-btn" onClick={handleBackPath} title="Go Back">
-              <ArrowLeft size={20} />
-            </button>
           </div>
         </header>
 
-        {/* Mobile Navigation (shows under search) */}
-        <div className="mobile-music-nav">
-          <button className={`music-nav-item ${activeTab === 'library' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('library')}>
-            Home
-          </button>
-          <button className={`music-nav-item ${activeTab === 'artists' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('artists')}>
-            Artists
-          </button>
-          <button className={`music-nav-item ${activeTab === 'albums' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('albums')}>
-            Albums
-          </button>
-          <button className={`music-nav-item ${activeTab === 'tracks' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('tracks')}>
-            Tracks
-          </button>
-          <button className={`music-nav-item ${activeTab === 'playlists' && !searchQuery ? 'active' : ''}`} onClick={() => loadTab('playlists')}>
-            Playlists
-          </button>
+        <div className="music-top-tabs">
+          {libraryTabs.map(({ id, label }) => (
+            <button key={id} className={`music-nav-item ${activeTab === id && !searchQuery ? 'active' : ''}`} onClick={() => loadTab(id)}>
+              {label}
+            </button>
+          ))}
         </div>
 
         <div className="music-content">
@@ -596,8 +623,11 @@ export default function MusicHome() {
           </div>
 
           <div className="player-extra">
-            <button className={`player-btn ${showQueue ? 'active' : ''}`} onClick={() => setShowQueue(!showQueue)} style={{ marginRight: '1rem' }} title="Queue">
+            <button className={`player-btn ${showQueue ? 'active' : ''}`} onClick={() => setShowQueue(!showQueue)} title="Queue">
               <ListMusic size={18} color={showQueue ? 'var(--primary)' : 'var(--text-secondary)'} />
+            </button>
+            <button className={`player-btn ${showPlayersPopup ? 'active' : ''}`} onClick={() => setShowPlayersPopup(!showPlayersPopup)} style={{ marginRight: '1rem' }} title="Players">
+              <Speaker size={18} color={showPlayersPopup ? 'var(--primary)' : 'var(--text-secondary)'} />
             </button>
             <div className="volume-control">
               <span style={{ color: 'var(--text-secondary)', display: 'flex' }}>
@@ -611,6 +641,175 @@ export default function MusicHome() {
             </div>
           </div>
         </div>
+
+        {/* Players Grouping Popup */}
+        {showPlayersPopup && (
+          <div className="players-popup animate-slide-up" style={{
+            position: 'absolute',
+            bottom: '90px',
+            right: '24px',
+            width: '320px',
+            background: 'var(--bg-card, #1a1a1e)',
+            borderRadius: '16px',
+            border: '1px solid var(--border)',
+            boxShadow: 'var(--shadow-deep, 0 24px 80px rgba(0,0,0,0.6))',
+            padding: '16px',
+            zIndex: 100
+          }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-main, #fff)' }}>
+              <Speaker size={18} /> Players
+            </h3>
+            
+            {/* Master Player */}
+            <div style={{ padding: '12px', background: 'var(--bg-elevated, rgba(128,128,128,0.1))', borderRadius: '12px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                {activePlayer.albumArt ? (
+                  <img src={activePlayer.albumArt} alt="" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }} />
+                ) : (
+                  <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'var(--bg-main, rgba(128,128,128,0.2))', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Music2 size={20} color="var(--text-main, #fff)" />
+                  </div>
+                )}
+                <div style={{ overflow: 'hidden' }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main, #fff)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activePlayer.title}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary, rgba(255,255,255,0.5))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {activePlayer.mediaTitle || 'Master Speaker'}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Volume2 size={14} color="var(--text-secondary, rgba(255,255,255,0.5))" />
+                <input type="range" min="0" max="100" 
+                  value={activePlayer.volume || 0}
+                  onChange={(e) => handleSetPlayerVolume(activePlayer.deviceId, parseInt(e.target.value, 10))}
+                  style={{ flex: 1, height: '4px', accentColor: 'var(--primary, #d4a373)' }} 
+                />
+              </div>
+            </div>
+
+            {/* Other Speakers */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '300px', overflowY: 'auto', paddingRight: '8px' }}>
+              {(() => {
+                // Build a map keyed by normalized entity base ID to merge duplicates
+                const uniquePlayersMap = new Map();
+                
+                const normalizeEntityBase = (id) => {
+                  // Strip "media_player." and "mass_" prefix only
+                  return (id || '')
+                    .replace('media_player.', '')
+                    .replace(/^mass_/, '')
+                    .toLowerCase().trim();
+                };
+                
+                players.forEach(p => {
+                  const normTitle = (p.title || '').toLowerCase().trim();
+                  const normBase = normalizeEntityBase(p.deviceId);
+                  
+                  // Check if this is a raw entity_id being used as a title (no spaces, has underscores/dots)
+                  const titleLooksLikeEntityId = normTitle.includes('media_player.') || 
+                    (normTitle.includes('_') && !normTitle.includes(' '));
+                  
+                  // Try to merge by title first, then by entity base
+                  const existingByTitle = !titleLooksLikeEntityId && uniquePlayersMap.get('title:' + normTitle);
+                  const existingByBase = uniquePlayersMap.get('base:' + normBase);
+                  
+                  if (existingByTitle) {
+                    // Same friendly title — prefer MA version
+                    if (p.isMusicAssistant && !existingByTitle.isMusicAssistant) {
+                      uniquePlayersMap.set('title:' + normTitle, p);
+                      // Also update the base key
+                      uniquePlayersMap.set('base:' + normalizeEntityBase(existingByTitle.deviceId), p);
+                      uniquePlayersMap.set('base:' + normBase, p);
+                    }
+                  } else if (existingByBase) {
+                    // Same physical speaker (matched by entity base) — prefer the one with a friendly name
+                    const existingTitleLooksRaw = (existingByBase.title || '').includes('_') && !(existingByBase.title || '').includes(' ');
+                    if (p.isMusicAssistant && !existingByBase.isMusicAssistant) {
+                      // Replace with MA version
+                      uniquePlayersMap.set('base:' + normBase, p);
+                      if (!titleLooksLikeEntityId) uniquePlayersMap.set('title:' + normTitle, p);
+                    } else if (!titleLooksLikeEntityId && existingTitleLooksRaw) {
+                      // Current has friendly name, existing has raw — replace
+                      uniquePlayersMap.set('base:' + normBase, p);
+                      uniquePlayersMap.set('title:' + normTitle, p);
+                    }
+                    // Otherwise keep existing
+                  } else {
+                    // New player
+                    uniquePlayersMap.set('base:' + normBase, p);
+                    if (!titleLooksLikeEntityId) uniquePlayersMap.set('title:' + normTitle, p);
+                  }
+                });
+                
+                // Collect unique players (deduplicate the values since multiple keys point to same player)
+                const seen = new Set();
+                const uniquePlayers = [];
+                for (const [key, p] of uniquePlayersMap) {
+                  if (key.startsWith('base:') && !seen.has(p.deviceId)) {
+                    seen.add(p.deviceId);
+                    uniquePlayers.push(p);
+                  }
+                }
+                return uniquePlayers;
+              })()
+                .filter(p => p.deviceId !== activePlayer.deviceId)
+                .filter(p => !activePlayer.isMusicAssistant || p.isMusicAssistant)
+                .filter(p => {
+                  // Hide speakers whose title is just a raw entity_id (e.g. "media_player.living_room_back_left_1")
+                  const t = (p.title || '').trim();
+                  return !(t.startsWith('media_player.') || (t.includes('_') && !t.includes(' ')));
+                })
+                .sort((a, b) => {
+                  const groupMembers = activePlayer.groupMembers || [];
+                  const aGrouped = optimisticGroups[a.deviceId] !== undefined ? optimisticGroups[a.deviceId] : groupMembers.includes(a.deviceId);
+                  const bGrouped = optimisticGroups[b.deviceId] !== undefined ? optimisticGroups[b.deviceId] : groupMembers.includes(b.deviceId);
+                  const aIsGroup = a.title.toLowerCase().includes('group');
+                  const bIsGroup = b.title.toLowerCase().includes('group');
+                  
+                  if (aGrouped && !bGrouped) return -1;
+                  if (!aGrouped && bGrouped) return 1;
+                  if (aIsGroup && !bIsGroup) return 1;
+                  if (!aIsGroup && bIsGroup) return -1;
+                  return a.title.localeCompare(b.title);
+                })
+                .map(p => {
+                const groupMembers = activePlayer.groupMembers || [];
+                const serverGrouped = groupMembers.includes(p.deviceId);
+                const isGrouped = optimisticGroups[p.deviceId] !== undefined ? optimisticGroups[p.deviceId] : serverGrouped;
+                
+                const serverVol = p.volume || 0;
+                const displayVol = optimisticVolumes[p.deviceId] !== undefined ? optimisticVolumes[p.deviceId] : serverVol;
+                
+                return (
+                  <div key={p.deviceId} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: isGrouped ? 'var(--text-main, #fff)' : 'var(--text-secondary, rgba(255,255,255,0.5))' }}>
+                        <Speaker size={16} />
+                        <span style={{ fontSize: '0.9rem' }}>{p.title}</span>
+                      </div>
+                      <input type="checkbox" 
+                        checked={isGrouped} 
+                        onChange={() => handleToggleGroupMember(p.deviceId, isGrouped)} 
+                        style={{ width: '18px', height: '18px', accentColor: 'var(--primary, #d4a373)', cursor: 'pointer' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '24px' }}>
+                      <Volume2 size={12} color="var(--text-secondary, rgba(255,255,255,0.5))" />
+                      <input type="range" min="0" max="100" 
+                        value={displayVol}
+                        onChange={(e) => handleSetPlayerVolume(p.deviceId, parseInt(e.target.value, 10))}
+                        disabled={!isGrouped}
+                        style={{ flex: 1, height: '4px', accentColor: 'var(--primary, #d4a373)', opacity: isGrouped ? 1 : 0.4 }} 
+                      />
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary, rgba(255,255,255,0.5))', width: '24px' }}>{displayVol}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
       </main>
     </div>
   );

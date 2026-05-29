@@ -35,7 +35,7 @@ const ColorControl = ({ onColorChange }) => {
         </div>
       </div>
 
-      <style jsx>{`
+      <style>{`
         .color-control-wrapper {
           display: flex;
           flex-direction: column;
@@ -53,21 +53,21 @@ const ColorControl = ({ onColorChange }) => {
         }
 
         /* Customize react-colorful wheel */
-        :global(.react-colorful) {
+        .react-colorful {
           width: 240px !important;
           height: 240px !important;
         }
-        :global(.react-colorful__saturation) {
+        .react-colorful__saturation {
           border-radius: 50% !important;
           margin-bottom: 0 !important;
           border-bottom: none !important;
         }
-        :global(.react-colorful__hue) {
+        .react-colorful__hue {
           height: 24px !important;
           border-radius: 12px !important;
           margin-top: 20px !important;
         }
-        :global(.react-colorful__pointer) {
+        .react-colorful__pointer {
           width: 24px !important;
           height: 24px !important;
         }

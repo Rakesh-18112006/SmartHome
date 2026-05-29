@@ -4,6 +4,12 @@ import { publishToLight, publishToTopic } from '../../integrations/mqtt/mqttMana
 import { getState, updateState } from '../devices/deviceState.js';
 import { callService } from '../../integrations/homeassistant/ha-client.js';
 
+const ACTION_EXECUTION_DELAY_MS = 250;
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 /**
  * Automation Engine
  * 
@@ -55,9 +61,36 @@ export function isEngineExecuting() {
 }
 
 /**
+ * Reset the edge-trigger state for a specific rule.
+ * Call this when a rule is updated so it can trigger again.
+ */
+export function resetRuleState(ruleId) {
+  _previousConditionState.delete(ruleId.toString());
+}
+
+/**
  * Evaluate a single condition against current sensor data.
  */
 function evaluateCondition(condition) {
+  // Check optional time bounds first
+  if (condition.startTime && condition.endTime) {
+    const now = new Date();
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+    
+    const [startH, startM] = condition.startTime.split(':').map(Number);
+    const startMins = startH * 60 + startM;
+    
+    const [endH, endM] = condition.endTime.split(':').map(Number);
+    const endMins = endH * 60 + endM;
+    
+    if (startMins <= endMins) {
+      if (currentMins < startMins || currentMins > endMins) return false;
+    } else {
+      // Overnight (e.g. 20:00 to 06:00)
+      if (currentMins < startMins && currentMins > endMins) return false;
+    }
+  }
+
   const currentValue = sensorData[condition.sensor];
   if (currentValue === undefined) return false;
 
@@ -81,8 +114,6 @@ async function executeAction(action, io) {
   try {
     const { targetDeviceId, subDeviceIndex, command, params } = action;
     console.log(`[AUTOMATION ENGINE] Executing action: ${command} on ${targetDeviceId} (Sub: ${subDeviceIndex})`);
-
-
 
     if (targetDeviceId && targetDeviceId.includes('.')) {
       console.log(`[AUTOMATION ENGINE] Routing HA action: ${command} on entity ${targetDeviceId}`);
@@ -140,28 +171,75 @@ async function executeAction(action, io) {
       }
     }
 
-    if (targetDeviceId.startsWith('BSQ')) {
+    if (targetDeviceId.startsWith('BSQ') || device.type === 'touch-panel') {
       // Touch Panel Logic (Multi-channel)
       topic = `touch-panel/${targetDeviceId}/switch/command`;
-      const idx = subDeviceIndex !== null ? subDeviceIndex : 0;
+      const idx = subDeviceIndex !== null && subDeviceIndex !== undefined ? Number(subDeviceIndex) : 0;
+      const matchedSubDevice = Array.isArray(device.subDevices)
+        ? device.subDevices.find(sd => Number(sd.index) === idx)
+        : null;
       
       if (command === 'turn_on' || command === 'turn_off') {
-        payload = { index: idx, status: command === 'turn_on' ? 1 : 0 };
-        // Update local DB state
-        if (device.subDevices && device.subDevices[idx]) {
-          device.subDevices[idx].on = (command === 'turn_on');
+        if (matchedSubDevice?.type === 'fan') {
+          const nextSpeed = Math.max(1, Number(params?.speed) || Number(matchedSubDevice.speed) || 1);
+
+          await publishToTopic(topic, {
+            entityId: targetDeviceId,
+            type: 'switch',
+            value: `${idx}${command === 'turn_on' ? '1' : '0'}`
+          });
+
+          if (command === 'turn_on') {
+            await sleep(120);
+            await publishToTopic(topic, {
+              entityId: targetDeviceId,
+              type: 'dimmer',
+              dimmer: String(idx),
+              value: String(nextSpeed)
+            });
+            matchedSubDevice.speed = nextSpeed;
+          }
+
+          matchedSubDevice.on = (command === 'turn_on');
+          await device.save();
+          if (io) io.emit('device_state_update', device);
+          return;
+        } else {
+          payload = {
+            entityId: targetDeviceId,
+            type: 'switch',
+            value: `${idx}${command === 'turn_on' ? '1' : '0'}`
+          };
+          // Update local DB state
+          if (matchedSubDevice) {
+            matchedSubDevice.on = (command === 'turn_on');
+          }
         }
       } else if (command === 'set_speed') {
-        // Find which subdevice is the fan
-        const fanIndex = device.subDevices.findIndex(sd => sd.type === 'fan');
-        if (fanIndex !== -1) {
-          topic = `touch-panel/${targetDeviceId}/dimmer/command`;
-          payload = { index: 0, status: params?.speed || 1 }; // Typically 1 dimmer per panel
-          device.subDevices[fanIndex].speed = params?.speed || 1;
-          device.subDevices[fanIndex].on = true;
+        if (matchedSubDevice?.type === 'fan') {
+          await publishToTopic(topic, {
+            entityId: targetDeviceId,
+            type: 'switch',
+            value: `${idx}1`
+          });
+          await sleep(120);
+          payload = {
+            entityId: targetDeviceId,
+            type: 'dimmer',
+            dimmer: String(idx),
+            value: String(params?.speed || 1)
+          };
+          matchedSubDevice.speed = params?.speed || 1;
+          matchedSubDevice.on = true;
         }
       }
-    } else if (targetDeviceId.startsWith('BS')) {
+    } else if (targetDeviceId.startsWith('BSP') || device.type === 'plug' || device.type === 'switch') {
+      // Smart Plug / Single Channel Switch
+      topic = `smart-switch/command/${targetDeviceId}`;
+      const status = (command === 'turn_on' ? 'ON' : 'OFF');
+      payload = { entityId: targetDeviceId, relayStatus: status };
+      device.on = (command === 'turn_on');
+    } else if (device.type === 'curtain') {
       // Specialized Curtain/Touch-Panel Logic (e.g. BS900000001)
       topic = `touch-panel/${targetDeviceId}/switch/command`;
       if (command === 'turn_on' || command === 'turn_off') {
@@ -188,12 +266,6 @@ async function executeAction(action, io) {
         if (io) io.emit('device_state_update', device);
         payload = {}; // Prevent duplicate publish at the end of the function
       }
-    } else if (targetDeviceId.startsWith('BSP') || device.type === 'plug' || device.type === 'switch') {
-      // Smart Plug / Single Channel Switch
-      topic = `smart-switch/command/${targetDeviceId}`;
-      const status = (command === 'turn_on' ? 'ON' : 'OFF');
-      payload = { entityId: targetDeviceId, relayStatus: status };
-      device.on = (command === 'turn_on');
     }
 
     if (topic && Object.keys(payload).length > 0) {
@@ -267,8 +339,12 @@ export async function evaluateAutomations(io) {
 
       try {
         // Execute all actions
-        for (const action of rule.actions) {
+        for (let actionIndex = 0; actionIndex < rule.actions.length; actionIndex += 1) {
+          const action = rule.actions[actionIndex];
           await executeAction(action, io);
+          if (actionIndex < rule.actions.length - 1) {
+            await sleep(ACTION_EXECUTION_DELAY_MS);
+          }
         }
       } finally {
         // Unlock execution and start suppression window

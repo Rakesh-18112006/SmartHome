@@ -190,9 +190,16 @@ export const initSocket = (io, mqttClient) => {
         topic = `smart-switch/command/${id}`;
       }
 
-      const mqttPayload = (id.startsWith('B3E') || id.startsWith('B1E') || id.startsWith('BSP') || device.type === 'plug' || device.type === 'switch')
-        ? { entityId: id, relayStatus: on ? 'ON' : 'OFF' }
-        : { state: on ? 'ON' : 'OFF' };
+      let mqttPayload;
+      if (device.type === 'tunable-light' || device.type === 'tune light') {
+        topic = `tunable-light/${id}/light/command`;
+        // Invert PWM: ON = 0 (full brightness), OFF = 100 (zero brightness)
+        mqttPayload = { type: 'brightness', value: on ? 0 : 100 };
+      } else if (id.startsWith('B3E') || id.startsWith('B1E') || id.startsWith('BSP') || device.type === 'plug' || device.type === 'switch') {
+        mqttPayload = { entityId: id, relayStatus: on ? 'ON' : 'OFF' };
+      } else {
+        mqttPayload = { state: on ? 'ON' : 'OFF' };
+      }
       
       await updateDeviceAndPublish(device.deviceId, { on }, mqttPayload, topic);
     });
@@ -390,16 +397,26 @@ export const initSocket = (io, mqttClient) => {
     socket.on('brightness_change', async (data) => {
       const { deviceId, brightness } = data;
       
-      const mqttPayload = {
+      const device = await Device.findOne({ deviceId });
+      if (!device) return;
+
+      let mqttPayload = {
         state: 'ON',
         brightness: Math.round((brightness / 100) * 255) // Map 0-100 to 0-255 if needed, or use raw
       };
       
-      // If the UI sends 0-255, we use that. The App.jsx seems to send raw 0-255 for lights.
-      // But for curtains it sends 0-100.
-      mqttPayload.brightness = brightness; 
+      let finalTopic = undefined;
 
-      await updateDeviceAndPublish(deviceId, { brightness, on: true }, mqttPayload);
+      if (device.type === 'tunable-light' || device.type === 'tune light') {
+        finalTopic = `tunable-light/${deviceId}/light/command`;
+        // Frontend sends 0-255 for lights. Convert to 0-100%, then invert (100% = 0, 0% = 100)
+        const pct = Math.round((brightness / 255) * 100);
+        mqttPayload = { type: 'brightness', value: 100 - pct };
+      } else {
+        mqttPayload.brightness = brightness; 
+      }
+
+      await updateDeviceAndPublish(deviceId, { brightness, on: true }, mqttPayload, finalTopic);
     });
 
     socket.on('white_change', async (data) => {

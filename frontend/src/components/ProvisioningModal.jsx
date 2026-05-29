@@ -5,7 +5,8 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     title: '',
-    icon: '💡',
+    icon: <img src="/icons/devices/light.png" alt="Light" style={{width: 32, height: 32, objectFit: 'contain'}} />,
+    label: 'Light',
     ssid: '',
     password: '',
     room: 'Unassigned',
@@ -22,7 +23,8 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
       setStep(1);
       setFormData({
         title: '',
-        icon: '💡',
+        icon: <img src="/icons/devices/light.png" alt="Light" style={{width: 32, height: 32, objectFit: 'contain'}} />,
+        label: 'Light',
         ssid: '',
         password: '',
         room: 'Unassigned',
@@ -51,13 +53,13 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
   if (!isOpen) return null;
 
   const icons = [
-    { label: 'Light', icon: '💡' },
-    { label: 'Plug', icon: '🔌' },
-    { label: 'RGBW', icon: '🌈' },
-    { label: 'Curtain', icon: '🪟' },
-    { label: '3-Phase Auditor', icon: '🏭' },
-    { label: 'Single Phase Auditor', icon: '⚡' },
-    { label: 'Touch Panel', icon: '🖐️' }
+    { label: 'Tune Light', icon: <img src="/icons/devices/light.png" alt="Light" style={{width: 32, height: 32, objectFit: 'contain'}} /> },
+    { label: 'Smart Plug', icon: <img src="/icons/devices/plug.png" alt="Plug" style={{width: 32, height: 32, objectFit: 'contain'}} /> },
+    { label: 'RGBW Light', icon: <img src="/icons/devices/rgbw.png" alt="RGBW" style={{width: 32, height: 32, objectFit: 'contain'}} /> },
+    { label: 'Curtain', icon: <img src="/icons/devices/curtain.png" alt="Curtain" style={{width: 32, height: 32, objectFit: 'contain'}} /> },
+    { label: '3-Phase Auditor', icon: <img src="/icons/devices/auditor.png" alt="3-Phase Auditor" style={{width: 32, height: 32, objectFit: 'contain'}} /> },
+    { label: 'Single Phase Auditor', icon: <img src="/icons/devices/auditor.png" alt="Single Phase Auditor" style={{width: 32, height: 32, objectFit: 'contain'}} /> },
+    { label: 'Touch Panel', icon: <img src="/icons/devices/touch_panel.png" alt="Touch Panel" style={{width: 32, height: 32, objectFit: 'contain'}} /> }
   ];
 
   const handleNext = () => setStep(step + 1);
@@ -80,18 +82,20 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
     setTimeout(() => {
       setIsConnecting(false);
       const deviceId = formData.deviceId || `esp-${Math.random().toString(16).slice(2, 6)}`;
-      const type = (formData.label || 'light').toLowerCase();
+      let type = (formData.label || 'Tune light').toLowerCase();
+      if (type === 'touch panel') type = 'touch-panel';
+      if (type === 'tune light') type = 'tunable-light';
+      
       onFinish({
         deviceId: deviceId.trim(),
         title: formData.title || `My ${formData.label || 'Device'}`,
-        type: type === 'touch panel' ? 'touch-panel' : type,
-        icon: formData.icon,
+        type: type,
         room: formData.room,
         isConfigured: true,
-        topic: type === 'touch panel' 
+        topic: type === 'touch-panel' 
           ? `touch-panel/${deviceId.trim()}/switch/status` 
           : `smarthome/${type}/${deviceId.trim()}`,
-        subDevices: type === 'touch panel' ? subDevices : []
+        subDevices: type === 'touch-panel' ? subDevices : []
       });
       setStep(1);
       setFormData({ ...formData, title: '', ssid: '', password: '', room: 'Unassigned', numSwitches: 1, numFans: 0 });
@@ -224,7 +228,7 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
                   <div className="sub-devices-list">
                     {subDevices.map((sd, i) => (
                       <div key={i} className="mini-sub-input">
-                        <span className="type-badge">{sd.type === 'fan' ? '🌀' : '💡'}</span>
+                        <span className="type-badge">{sd.type === 'fan' ? <img src="/icons/icons/Power.svg" alt="Fan" style={{width:16, height:16}}/> : <img src="/icons/icons/Theme.svg" alt="Tune light" style={{width:16, height:16}}/>}</span>
                         <input 
                           type="text" 
                           placeholder={`Button ${sd.index}`}
@@ -340,7 +344,7 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
         .loading-overlay {
           position: absolute; top: 0; left: 0; right: 0; bottom: 0;
           background: var(--bg-card); display: flex; flex-direction: column; align-items: center; justify-content: center;
-          text-align: center; padding: 40px; z-index: 10;
+          text-align: center; padding: 40px; z-index: 10; color: var(--text-main);
         }
         .loader {
           width: 40px; height: 40px; border: 4px solid var(--bg-main); border-top-color: var(--primary);
@@ -350,19 +354,13 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
         .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
 
         @media (max-width: 768px) {
-          .modal-overlay {
-            align-items: flex-end;
-            padding: 0;
-          }
           .provisioning-modal {
-            width: 100% !important;
-            max-width: 100% !important;
-            border-radius: 24px 24px 0 0 !important;
-            margin: 0;
+            width: 90% !important;
+            max-width: 440px !important;
+            border-radius: var(--radius-lg) !important;
             max-height: 90dvh;
             overflow-y: auto;
-            padding: 24px 20px !important;
-            padding-bottom: max(24px, env(safe-area-inset-bottom)) !important;
+            padding: 24px !important;
           }
           .form-row {
             grid-template-columns: 1fr;
@@ -386,3 +384,4 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
 };
 
 export default ProvisioningModal;
+

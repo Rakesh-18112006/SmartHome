@@ -13,7 +13,7 @@ export const fetchWithAuth = async (url, options = {}) => {
   const response = await fetch(url, { ...options, headers });
   if (response.status === 401) {
     localStorage.removeItem('smarthome_token');
-    window.location.href = '/login';
+    window.location.replace('/login');
   }
   return response;
 };
@@ -25,20 +25,20 @@ const ProtectedRoute = ({ children }) => {
 };
 
 import io from 'socket.io-client';
-import { Power, Search, LayoutDashboard, Settings, Plus, Activity, Thermometer, Moon, Sun, Radio, Droplets, Footprints, Wind, Sofa, BedDouble, ChefHat, Monitor, Bath, CarFront, Trees, Home as HomeIcon, Coffee, Menu, ArrowLeft, Trash2 } from 'lucide-react';
+
 import Sidebar from './components/Sidebar';
 
 const getRoomIcon = (roomName) => {
   const name = (roomName || '').toLowerCase();
-  if (name.includes('living')) return <Sofa size={24} className="room-svg-icon" style={{ color: '#3b82f6' }} />;
-  if (name.includes('bed')) return <BedDouble size={24} className="room-svg-icon" style={{ color: '#6366f1' }} />;
-  if (name.includes('kitchen')) return <ChefHat size={24} className="room-svg-icon" style={{ color: '#f59e0b' }} />;
-  if (name.includes('office') || name.includes('work')) return <Monitor size={24} className="room-svg-icon" style={{ color: '#10b981' }} />;
-  if (name.includes('bath')) return <Bath size={24} className="room-svg-icon" style={{ color: '#06b6d4' }} />;
-  if (name.includes('garage')) return <CarFront size={24} className="room-svg-icon" style={{ color: '#64748b' }} />;
-  if (name.includes('garden') || name.includes('yard')) return <Trees size={24} className="room-svg-icon" style={{ color: '#10b981' }} />;
-  if (name.includes('dining')) return <Coffee size={24} className="room-svg-icon" style={{ color: '#f59e0b' }} />;
-  return <HomeIcon size={24} className="room-svg-icon" style={{ color: '#8b7355' }} />;
+  if (name.includes('living')) return <img src="/icons/icons/rooms_icons/LivingRoom.svg" className="room-svg-icon" style={{ width: 28, height: 28 }} />;
+  if (name.includes('bed')) return <img src="/icons/icons/rooms_icons/MasterBedRoom.svg" className="room-svg-icon" style={{ width: 28, height: 28 }} />;
+  if (name.includes('kitchen')) return <img src="/icons/icons/rooms_icons/Kitchen.svg" className="room-svg-icon" style={{ width: 28, height: 28 }} />;
+  if (name.includes('office') || name.includes('work')) return <img src="/icons/icons/rooms_icons/StudyRoom.svg" className="room-svg-icon" style={{ width: 28, height: 28 }} />;
+  if (name.includes('bath')) return <img src="/icons/icons/rooms_icons/BathRoom.svg" className="room-svg-icon" style={{ width: 28, height: 28 }} />;
+  if (name.includes('garage')) return <img src="/icons/icons/rooms_icons/Other.svg" className="room-svg-icon" style={{ width: 28, height: 28 }} />;
+  if (name.includes('garden') || name.includes('yard') || name.includes('balcony')) return <img src="/icons/icons/rooms_icons/Balcony.svg" className="room-svg-icon" style={{ width: 28, height: 28 }} />;
+  if (name.includes('dining')) return <img src="/icons/icons/rooms_icons/Dining.svg" className="room-svg-icon" style={{ width: 28, height: 28 }} />;
+  return <img src="/icons/icons/Home.svg" className="room-svg-icon" style={{ width: 28, height: 28 }} />;
 };
 import DeviceCard from './components/DeviceCard';
 import ColorControl from './components/ColorControl';
@@ -52,6 +52,8 @@ import MusicDeck from './components/MusicDeck';
 import Staircase from './components/Staircase';
 import MusicHome from './components/MusicHome';
 import AudioDevicesTab from './components/AudioDevicesTab';
+import { getDeviceIconLabel, getDeviceIconSrc } from './deviceIcons';
+import Surveillance from './components/Surveillance';
 
 // Dynamic API Base URL for network access
 const API_BASE = `http://${window.location.hostname}:3000`;
@@ -62,7 +64,7 @@ export const socket = io(API_BASE, {
 });
 
 const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => window.history.state?.tab || 'dashboard');
   const [selectedDevice, setSelectedDevice] = useState(null);
   const [lightStatus, setLightStatus] = useState(false);
   const [brightness, setBrightness] = useState(100);
@@ -125,10 +127,20 @@ const Dashboard = () => {
 
   const isInteracting = useRef(false);
   const sensorsRef = useRef(sensors);
+  const devicesRef = useRef(devices);
+  const roomsRef = useRef(rooms);
 
   useEffect(() => {
     sensorsRef.current = sensors;
   }, [sensors]);
+
+  useEffect(() => {
+    devicesRef.current = devices;
+  }, [devices]);
+
+  useEffect(() => {
+    roomsRef.current = rooms;
+  }, [rooms]);
 
   useEffect(() => {
     fetchDevices();
@@ -350,18 +362,23 @@ const Dashboard = () => {
           isMusicAssistant: haDevice.isMusicAssistant,
           mediaPosition: haDevice.mediaPosition,
           mediaDuration: haDevice.mediaDuration,
-          mediaPositionUpdatedAt: haDevice.mediaPositionUpdatedAt
+          mediaPositionUpdatedAt: haDevice.mediaPositionUpdatedAt,
+          groupMembers: haDevice.raw?.attributes?.group_members || [],
+          raw: haDevice.raw
         };
 
         if (existingIndex >= 0) {
-          // Update existing, but preserve custom DB properties
+          // If the device is purely from HA and hasn't been custom-edited in our DB, we should let HA dictate the room and title.
+          // We can check if it's missing from our 'devices' DB array to know if it's purely HA.
+          // For now, if it's an HA device, just prefer the HA mapped properties over the old ones if the old ones were "Unassigned".
           const updated = [...list];
+          const preferHA = mappedDevice.isHomeAssistant;
           updated[existingIndex] = { 
             ...updated[existingIndex], 
             ...mappedDevice,
-            title: updated[existingIndex].isConfigured ? updated[existingIndex].title : mappedDevice.title,
-            room: updated[existingIndex].isConfigured ? updated[existingIndex].room : mappedDevice.room,
-            icon: updated[existingIndex].isConfigured ? updated[existingIndex].icon : mappedDevice.icon,
+            title: preferHA ? mappedDevice.title : (updated[existingIndex].isConfigured ? updated[existingIndex].title : mappedDevice.title),
+            room: preferHA ? mappedDevice.room : (updated[existingIndex].isConfigured ? updated[existingIndex].room : mappedDevice.room),
+            icon: preferHA ? mappedDevice.icon : (updated[existingIndex].isConfigured ? updated[existingIndex].icon : mappedDevice.icon),
             isConfigured: updated[existingIndex].isConfigured 
           };
           return updated;
@@ -564,7 +581,7 @@ const Dashboard = () => {
   const renderDetailView = () => {
     if (!selectedDevice) return null;
 
-    const isLight = selectedDevice.type === 'light' || selectedDevice.type === 'rgbw';
+    const isLight = selectedDevice.type === 'light' || selectedDevice.type === 'rgbw' || selectedDevice.type === 'tunable-light' || selectedDevice.type === 'tune light';
     const isTouchPanel = selectedDevice.type === 'touch-panel' || selectedDevice.deviceId.startsWith('BSQ');
     const isPlug = selectedDevice.type === 'plug' || selectedDevice.type === 'switch' || selectedDevice.deviceId.startsWith('BSP');
     const isEnergyMonitor = selectedDevice.deviceId.startsWith('B1E') || selectedDevice.deviceId.startsWith('B3E') || selectedDevice.deviceId.startsWith('BSP');
@@ -641,7 +658,7 @@ const Dashboard = () => {
         <div className="control-card glass energy-card">
           <h3>Energy Monitoring</h3>
           <div className="energy-main-val">
-            <Activity size={20} />
+            <img src="/icons/icons/Insight-White.svg" alt="Activity" style={{width: 20, height: 20}} />
             <span>{selectedDevice.power || 0} W</span>
           </div>
           <div className="energy-grid-mini">
@@ -660,19 +677,25 @@ const Dashboard = () => {
 
     return (
       <div className="detail-view animate-slide-up">
-        <header className="detail-header">
-          <button className="back-btn glass" onClick={() => setSelectedDevice(null)}>
-            <LayoutDashboard size={18} /> Back
-          </button>
+        <header className="detail-header" style={{ marginBottom: '16px' }}>
           <div className="title-row">
             <div className="title-left">
-              <span className="device-icon-large">{selectedDevice.icon}</span>
+              <button className="icon-back-btn" onClick={closeDeviceWithHistory} style={{ margin: 0 }}>
+                <img src="/icons/icons/Arrow-White.svg" style={{width: 20, height: 20, transform: 'scaleX(-1)'}} />
+              </button>
+              <span className="device-icon-large">
+                <img
+                  src={getDeviceIconSrc(selectedDevice)}
+                  alt={getDeviceIconLabel(selectedDevice)}
+                  className="device-visual-icon large"
+                />
+              </span>
               <div className="device-meta">
                 <h1>{selectedDevice.title}</h1>
                 <span className="device-id">{selectedDevice.deviceId} • {selectedDevice.room}</span>
               </div>
-              <button className="edit-settings-btn" onClick={() => setConfiguringDevice(selectedDevice)}>
-                <Settings size={18} />
+              <button className="edit-settings-btn" onClick={() => openModalWithHistory(setConfiguringDevice, 'config', selectedDevice)}>
+                <img src="/icons/icons/Settings-White.svg" style={{width: 18, height: 18}} />
               </button>
             </div>
             <div className={`status-pill ${selectedDevice.isOnline ? 'active' : ''}`}>
@@ -700,7 +723,7 @@ const Dashboard = () => {
                     <div className="header-actions">
                       {selectedDevice.type === 'light' && (
                         <div className="auto-pill">
-                          <Sun size={14} />
+                          <img src="/icons/icons/Theme.svg" style={{width: 14, height: 14}} />
                           <span>{currentLux} lx</span>
                           <button
                             className={`mini-toggle ${autoMode ? 'active' : ''}`}
@@ -714,7 +737,7 @@ const Dashboard = () => {
                         className={`power-pill-btn ${lightStatus ? 'active' : ''}`}
                         onClick={() => toggleLight(!lightStatus)}
                       >
-                        <Power size={18} />
+                        <img src="/icons/icons/Power-White.svg" style={{width: 18, height: 18}} />
                         {lightStatus ? 'ON' : 'OFF'}
                       </button>
                     </div>
@@ -772,7 +795,7 @@ const Dashboard = () => {
                       className={`master-power-btn ${lightStatus ? 'active' : ''}`}
                       onClick={() => toggleLight(!lightStatus)}
                     >
-                      <Power size={48} />
+                      <img src="/icons/icons/Power-White.svg" style={{width: 48, height: 48}} />
                       <span>{lightStatus ? 'TAP TO TURN OFF' : 'TAP TO TURN ON'}</span>
                     </button>
                   </div>
@@ -830,7 +853,7 @@ const Dashboard = () => {
                               value: !sd.on
                             })}
                           >
-                            <Power size={16} />
+                            <img src="/icons/icons/Power-White.svg" style={{width: 16, height: 16}} />
                           </button>
                         </div>
                         <span className="label">{sd.label}</span>
@@ -889,7 +912,7 @@ const Dashboard = () => {
                         <option value="ON">Turn ON</option>
                         <option value="OFF">Turn OFF</option>
                       </select>
-                      <Moon size={18} />
+                      <img src="/icons/icons/Theme.svg" style={{width: 18, height: 18}} />
                     </div>
                   </div>
                   <div className="timer-options">
@@ -939,7 +962,7 @@ const Dashboard = () => {
                 <div className="control-card glass schedule-card">
                   <div className="card-header-row">
                     <h3>Schedules</h3>
-                    <Activity size={18} />
+                    <img src="/icons/icons/Insight-White.svg" style={{width: 18, height: 18}} />
                   </div>
                   <div className="schedules-list">
                     {(selectedDevice.schedules || []).length === 0 ? (
@@ -973,8 +996,8 @@ const Dashboard = () => {
           <h2>Custom Sensors</h2>
           <p>Real-time telemetry from custom MQTT topics</p>
         </div>
-        <button className="primary-btn" onClick={() => setIsSensorModalOpen(true)}>
-          <Plus size={20} />
+        <button className="primary-btn" onClick={() => openModalWithHistory(setIsSensorModalOpen, 'sensor')}>
+          <img src="/icons/icons/Plus-White.svg" style={{width: 20, height: 20}} />
           Add Sensor
         </button>
       </div>
@@ -982,9 +1005,9 @@ const Dashboard = () => {
       <div className="devices-grid">
         {sensors.length === 0 ? (
           <div className="empty-state">
-            <Radio size={48} className="empty-icon" />
+            <img src="/icons/icons/WIFI-White.svg" style={{width: 48, height: 48}} className="empty-icon" />
             <p>No sensors added yet</p>
-            <button onClick={() => setIsSensorModalOpen(true)}>Configure first sensor</button>
+            <button onClick={() => openModalWithHistory(setIsSensorModalOpen, 'sensor')}>Configure first sensor</button>
           </div>
         ) : (
           sensors.map(sensor => (
@@ -1004,8 +1027,8 @@ const Dashboard = () => {
       <div className="welcome-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           {currentRoom && (
-            <button className="icon-back-btn" onClick={() => setCurrentRoom(null)}>
-              <ArrowLeft size={20} />
+            <button className="icon-back-btn" onClick={handleBackNavigation}>
+              <img src="/icons/icons/Arrow-White.svg" style={{width: 20, height: 20, transform: 'scaleX(-1)'}} />
             </button>
           )}
           <div className="header-text">
@@ -1016,11 +1039,11 @@ const Dashboard = () => {
         <div className="header-actions-group">
           {!currentRoom && (
             <>
-              <button className="action-btn-pill secondary" onClick={() => setIsRoomModalOpen(true)}>
-                <Plus size={18} /> Add Room
+              <button className="action-btn-pill secondary" onClick={() => openModalWithHistory(setIsRoomModalOpen, 'room')}>
+                <img src="/icons/icons/Plus-White.svg" style={{width: 18, height: 18}} /> Add Room
               </button>
-              <button className="action-btn-pill primary" onClick={() => setIsModalOpen(true)}>
-                <Plus size={18} /> Add Device
+              <button className="action-btn-pill primary" onClick={() => openModalWithHistory(setIsModalOpen, 'device')}>
+                <img src="/icons/icons/Plus-White.svg" style={{width: 18, height: 18}} /> Add Device
               </button>
             </>
           )}
@@ -1041,7 +1064,7 @@ const Dashboard = () => {
               const activeCount = roomDevices.filter(d => d.on).length;
               return (
               <div key={room.name} className="room-card-wrapper">
-                <div className="room-card glass card-hover" onClick={() => setCurrentRoom(room)}>
+                <div className="room-card glass card-hover" onClick={() => setRoomWithHistory(room)}>
                   <div className="room-card-header">
                     <span className="room-card-icon">{getRoomIcon(room.name)}</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1054,7 +1077,7 @@ const Dashboard = () => {
                         title="Delete Room"
                         onClick={(e) => { e.stopPropagation(); handleRemoveRoom(room.name); }}
                       >
-                        <Trash2 size={14} />
+                        <img src="/icons/icons/Delete-White.svg" style={{width: 14, height: 14}} />
                       </button>
                     </div>
                   </div>
@@ -1063,7 +1086,7 @@ const Dashboard = () => {
                     <p>{roomDevices.length} Devices Registered</p>
                   </div>
                   <div className="room-card-footer">
-                    <div className="view-link"><span>View Details</span><Activity size={14} /></div>
+                    <div className="view-link"><span>View Details</span><img src="/icons/icons/Insight-White.svg" style={{width: 14, height: 14}} /></div>
                   </div>
                 </div>
               </div>
@@ -1079,13 +1102,13 @@ const Dashboard = () => {
                 {roomSensors.length > 0 && (
                   <div className="sensor-bar" style={{ marginBottom: '24px' }}>
                     {roomSensors.map(sensor => {
-                      let Icon = Radio;
+                      let iconSrc = "/icons/icons/WIFI-White.svg";
                       const n = (sensor.name || '').toLowerCase();
-                      if (n.includes('temp')) Icon = Thermometer;
-                      else if (n.includes('humid')) Icon = Droplets;
-                      else if (n.includes('lux') || n.includes('light')) Icon = Sun;
-                      else if (n.includes('motion') || n.includes('pres')) Icon = Footprints;
-                      else if (n.includes('co2') || n.includes('air')) Icon = Activity;
+                      if (n.includes('temp')) iconSrc = "/icons/icons/Theme.svg";
+                      else if (n.includes('humid')) iconSrc = "/icons/icons/Theme.svg";
+                      else if (n.includes('lux') || n.includes('light')) iconSrc = "/icons/icons/Theme.svg";
+                      else if (n.includes('motion') || n.includes('pres')) iconSrc = "/icons/icons/Profile-White.svg";
+                      else if (n.includes('co2') || n.includes('air')) iconSrc = "/icons/icons/Insight-White.svg";
                       
                       let val = sensor.value;
                       if (typeof val === 'string' && val.startsWith('{')) {
@@ -1100,7 +1123,7 @@ const Dashboard = () => {
                       
                       return (
                         <div className="sensor-chip" key={sensor._id}>
-                          <span className="icon"><Icon size={20} /></span>
+                          <span className="icon"><img src={iconSrc} style={{width: 20, height: 20}} /></span>
                           <div className="info">
                             <span className="label">{sensor.name}</span>
                             <span className="val">{val}{sensor.unit ? ` ${sensor.unit}` : ''}</span>
@@ -1111,12 +1134,66 @@ const Dashboard = () => {
                   </div>
                 )}
                 
-                <MusicDeck 
-                  socket={socket}
-                  players={(Array.isArray(devices) ? devices : []).filter(d => d.room === currentRoom.name && d.type === 'media_player' && d.deviceClass !== 'tv')} 
-                  allMediaPlayers={(Array.isArray(devices) ? devices : []).filter(d => d.type === 'media_player')}
-                  onCommand={handleMediaCommand} 
-                />
+                {(() => {
+                  const roomPlayers = (Array.isArray(devices) ? devices : []).filter(d => d.room === currentRoom.name && d.type === 'media_player' && d.deviceClass !== 'tv');
+                  const allMediaPlayers = (Array.isArray(devices) ? devices : []).filter(d => d.type === 'media_player');
+                  
+                  const normalizeEntityBase = (id) => (id || '').replace('media_player.', '').replace(/^mass_/, '').toLowerCase().trim();
+                  const uniquePlayersMap = new Map();
+                  
+                  roomPlayers.forEach(p => {
+                    const normTitle = (p.title || '').toLowerCase().trim();
+                    const normBase = normalizeEntityBase(p.deviceId);
+                    const titleLooksLikeEntityId = normTitle.includes('media_player.') || (normTitle.includes('_') && !normTitle.includes(' '));
+                    
+                    const existingByTitle = !titleLooksLikeEntityId && uniquePlayersMap.get('title:' + normTitle);
+                    const existingByBase = uniquePlayersMap.get('base:' + normBase);
+                    
+                    if (existingByTitle) {
+                      if (p.isMusicAssistant && !existingByTitle.isMusicAssistant) {
+                        uniquePlayersMap.set('title:' + normTitle, p);
+                        uniquePlayersMap.set('base:' + normalizeEntityBase(existingByTitle.deviceId), p);
+                        uniquePlayersMap.set('base:' + normBase, p);
+                      }
+                    } else if (existingByBase) {
+                      const existingTitleLooksRaw = (existingByBase.title || '').includes('_') && !(existingByBase.title || '').includes(' ');
+                      if (p.isMusicAssistant && !existingByBase.isMusicAssistant) {
+                        uniquePlayersMap.set('base:' + normBase, p);
+                        if (!titleLooksLikeEntityId) uniquePlayersMap.set('title:' + normTitle, p);
+                      } else if (!titleLooksLikeEntityId && existingTitleLooksRaw) {
+                        uniquePlayersMap.set('base:' + normBase, p);
+                        uniquePlayersMap.set('title:' + normTitle, p);
+                      }
+                    } else {
+                      uniquePlayersMap.set('base:' + normBase, p);
+                      if (!titleLooksLikeEntityId) uniquePlayersMap.set('title:' + normTitle, p);
+                    }
+                  });
+                  
+                  const seen = new Set();
+                  const uniquePlayers = [];
+                  for (const [key, p] of uniquePlayersMap) {
+                    if (key.startsWith('base:') && !seen.has(p.deviceId)) {
+                      seen.add(p.deviceId);
+                      uniquePlayers.push(p);
+                    }
+                  }
+
+                  return (
+                    <div className="room-music-decks" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {uniquePlayers.map(player => (
+                        <MusicDeck 
+                          key={player.deviceId}
+                          forcedPlayerId={player.deviceId}
+                          socket={socket}
+                          players={roomPlayers} 
+                          allMediaPlayers={allMediaPlayers}
+                          onCommand={handleMediaCommand} 
+                        />
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 <div className="devices-grid">
                   {(Array.isArray(devices) ? devices : []).filter(d => d.room === currentRoom.name && d.isConfigured && d.type !== 'media_player').map(device => (
@@ -1126,12 +1203,18 @@ const Dashboard = () => {
                       title={device.title}
                       status={device.isOnline}
                       on={device.on}
-                      icon={device.icon || "💡"}
+                      icon={
+                        <img
+                          src={getDeviceIconSrc(device)}
+                          alt={getDeviceIconLabel(device)}
+                          className="device-visual-icon"
+                        />
+                      }
                       type={device.type}
                       onToggle={() => toggleLight(!device.on)}
                       onAction={(action) => {
-                        if (action === 'navigate') setSelectedDevice(device);
-                        else if (action === 'edit') setConfiguringDevice(device);
+                        if (action === 'navigate') openDeviceWithHistory(device);
+                        else if (action === 'edit') openModalWithHistory(setConfiguringDevice, 'config', device);
                         else if (action === 'remove') handleRemoveDevice(device.deviceId);
                       }}
                     />
@@ -1153,8 +1236,8 @@ const Dashboard = () => {
           <p>Managing {devices.length} appliances across your home</p>
         </div>
         <div className="header-actions-group">
-          <button className="action-btn-pill primary" onClick={() => setIsModalOpen(true)}>
-            <Plus size={18} /> Add Device
+          <button className="action-btn-pill primary" onClick={() => openModalWithHistory(setIsModalOpen, 'device')}>
+            <img src="/icons/icons/Plus-White.svg" style={{width: 18, height: 18}} /> Add Device
           </button>
         </div>
       </div>
@@ -1167,14 +1250,20 @@ const Dashboard = () => {
             title={device.title}
             status={device.isOnline}
             on={device.on}
-            icon={device.icon || "💡"}
+            icon={
+              <img
+                src={getDeviceIconSrc(device)}
+                alt={getDeviceIconLabel(device)}
+                className="device-visual-icon"
+              />
+            }
             type={device.type}
             onToggle={() => toggleLight(!device.on)}
             onAction={(action) => {
               if (action === 'navigate') {
-                setSelectedDevice(device);
+                openDeviceWithHistory(device);
               } else if (action === 'edit') {
-                setConfiguringDevice(device);
+                openModalWithHistory(setConfiguringDevice, 'config', device);
               } else if (action === 'remove') {
                 handleRemoveDevice(device.deviceId);
               }
@@ -1237,7 +1326,7 @@ const Dashboard = () => {
               </div>
             ))}
           </div>
-          <button className="add-room-btn glass" style={{ width: '100%', marginTop: '16px' }} onClick={() => setIsRoomModalOpen(true)}>
+          <button className="add-room-btn glass" style={{ width: '100%', marginTop: '16px' }} onClick={() => openModalWithHistory(setIsRoomModalOpen, 'room')}>
             + Add New Room
           </button>
         </div>
@@ -1258,15 +1347,143 @@ const Dashboard = () => {
     </div>
   );
 
+  const pushDashboardHistory = (nextState) => {
+    window.history.pushState({ ...(window.history.state || {}), ...nextState }, '');
+  };
+
+  const replaceDashboardHistory = (nextState) => {
+    window.history.replaceState({ ...(window.history.state || {}), ...nextState }, '');
+  };
+
+  const resolveHistoryRoom = (roomName) => {
+    if (!roomName) return null;
+    const storedRoom = (Array.isArray(roomsRef.current) ? roomsRef.current : []).find((room) => room.name === roomName);
+    if (storedRoom) return storedRoom;
+    return { name: roomName, icon: '🏠' };
+  };
+
+  const resolveHistoryDevice = (deviceId) => {
+    if (!deviceId) return null;
+    return (Array.isArray(devicesRef.current) ? devicesRef.current : []).find((device) => device.deviceId === deviceId) || null;
+  };
+
+  // History and Back Button Management
+  useEffect(() => {
+    if (!window.history.state?.tab) {
+      replaceDashboardHistory({
+        tab: activeTab,
+        panel: null,
+        roomName: null,
+        detailDeviceId: null,
+        modal: null,
+      });
+    }
+
+    const handlePopState = (e) => {
+      const state = e.state || {};
+      
+      if (!state.modal) {
+        setIsModalOpen(false);
+        setIsRoomModalOpen(false);
+        setIsSensorModalOpen(false);
+        setConfiguringDevice(null);
+      }
+      
+      setCurrentRoom(resolveHistoryRoom(state.roomName));
+      setSelectedDevice(resolveHistoryDevice(state.detailDeviceId));
+      
+      if (state.tab) {
+        setActiveTab(state.tab);
+      } else {
+        setActiveTab('dashboard');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeTab]);
+
+  const openModalWithHistory = (setter, modalName, value = true) => {
+    pushDashboardHistory({
+      modal: modalName,
+      scenesRoom: null,
+      scenesModal: null,
+    });
+    setter(value);
+  };
+
+  const closeModalWithHistory = (setter, modalName, nullValue = false) => {
+    setter(nullValue);
+    if (window.history.state?.modal === modalName) {
+      window.history.back();
+    }
+  };
+
   // Unified navigation handler
   const handleTabChange = (tabId) => {
+    if (tabId === activeTab) return;
+
+    const nextHistoryState = {
+      tab: tabId,
+      panel: null,
+      roomName: null,
+      detailDeviceId: null,
+      modal: null,
+      scenesRoom: null,
+      scenesModal: null,
+    };
+
+    pushDashboardHistory(nextHistoryState);
+
     setActiveTab(tabId);
     setSelectedDevice(null);
+    setCurrentRoom(null);
     setSearchQuery('');
     setConfiguringDevice(null);
     setIsModalOpen(false);
     setIsRoomModalOpen(false);
     setIsSensorModalOpen(false);
+  };
+
+  const setRoomWithHistory = (room) => {
+    pushDashboardHistory({
+      tab: activeTab,
+      panel: 'room',
+      roomName: room.name,
+      detailDeviceId: null,
+      modal: null,
+      scenesRoom: null,
+      scenesModal: null,
+    });
+    setCurrentRoom(room);
+    setSelectedDevice(null);
+  };
+
+  const openDeviceWithHistory = (device) => {
+    pushDashboardHistory({
+      tab: activeTab,
+      panel: 'device',
+      roomName: currentRoom?.name || null,
+      detailDeviceId: device.deviceId,
+      modal: null,
+      scenesRoom: null,
+      scenesModal: null,
+    });
+    setSelectedDevice(device);
+  };
+
+  const closeDeviceWithHistory = () => {
+    setSelectedDevice(null);
+    if (window.history.state?.detailDeviceId) {
+      window.history.back();
+    }
+  };
+
+  const handleBackNavigation = () => {
+    if (window.history.state?.roomName || window.history.state?.detailDeviceId) {
+      window.history.back();
+      return;
+    }
+    if (currentRoom) setCurrentRoom(null);
   };
 
   return (
@@ -1276,10 +1493,10 @@ const Dashboard = () => {
         <header className="top-bar glass">
           <div className="top-bar-left">
             <button className="mobile-menu-toggle" onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}>
-              <Menu size={24} color="var(--text-muted)" />
+              <img src={isDarkMode ? "/icons/icons/Menu-White.svg" : "/icons/icons/Menu.svg"} style={{width: 24, height: 24}} />
             </button>
             <div className="search-bar">
-              <Search size={18} color="var(--text-muted)" />
+              <img src={isDarkMode ? "/icons/icons/Insight-White.svg" : "/icons/icons/Insight.svg"} style={{width: 18, height: 18}} />
               <input
                 type="text"
                 placeholder="Search devices, rooms..."
@@ -1290,7 +1507,7 @@ const Dashboard = () => {
           </div>
           <div className="status-chips">
             <button className="theme-toggle-btn" onClick={() => setIsDarkMode(!isDarkMode)}>
-              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+              <img src="/icons/icons/Theme.svg" style={{width: 20, height: 20}} />
             </button>
             <div className={`status-badge ${mqttStatus === 'Connected' ? 'success' : 'warning'}`}>
               <span className="dot"></span>
@@ -1322,12 +1539,18 @@ const Dashboard = () => {
                     title={device.title}
                     status={device.isOnline}
                     on={device.on}
-                    icon={device.icon || "💡"}
+                    icon={
+                      <img
+                        src={getDeviceIconSrc(device)}
+                        alt={getDeviceIconLabel(device)}
+                        className="device-visual-icon"
+                      />
+                    }
                     type={device.type}
                     onToggle={() => toggleLight(!device.on)}
                     onAction={(action) => {
-                      if (action === 'navigate') setSelectedDevice(device);
-                      else if (action === 'edit') setConfiguringDevice(device);
+                      if (action === 'navigate') openDeviceWithHistory(device);
+                      else if (action === 'edit') openModalWithHistory(setConfiguringDevice, 'config', device);
                       else if (action === 'remove') handleRemoveDevice(device.deviceId);
                     }}
                   />
@@ -1344,6 +1567,7 @@ const Dashboard = () => {
               {activeTab === 'devices' && renderDevicesView()}
               {activeTab === 'audio-devices' && <AudioDevicesTab socket={socket} allMediaPlayers={(Array.isArray(devices) ? devices : []).filter(d => d.type === 'media_player')} />}
               {activeTab === 'staircase' && <Staircase socket={socket} mqttStatus={mqttStatus} />}
+              {activeTab === 'surveillance' && <Surveillance />}
               {activeTab === 'settings' && renderSettingsView()}
             </>
           )}
@@ -1351,13 +1575,13 @@ const Dashboard = () => {
       </main>
       <AddSensorModal 
         isOpen={isSensorModalOpen} 
-        onClose={() => setIsSensorModalOpen(false)}
+        onClose={() => closeModalWithHistory(setIsSensorModalOpen, 'sensor')}
         onAdd={handleAddSensor}
         rooms={rooms}
       />
-      <ProvisioningModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onFinish={handleAddDevice} />
-      <AddRoomModal isOpen={isRoomModalOpen} onClose={() => setIsRoomModalOpen(false)} onAdd={handleAddRoom} />
-      <ConfigureDeviceModal isOpen={!!configuringDevice} device={configuringDevice} onClose={() => setConfiguringDevice(null)} onConfigure={handleConfigureDevice} />
+      <ProvisioningModal isOpen={isModalOpen} onClose={() => closeModalWithHistory(setIsModalOpen, 'device')} onFinish={handleAddDevice} />
+      <AddRoomModal isOpen={isRoomModalOpen} onClose={() => closeModalWithHistory(setIsRoomModalOpen, 'room')} onAdd={handleAddRoom} />
+      <ConfigureDeviceModal isOpen={!!configuringDevice} device={configuringDevice} onClose={() => closeModalWithHistory(setConfiguringDevice, 'config', null)} onConfigure={handleConfigureDevice} />
       {toast && <div className="toast"><span>💡</span> {toast}</div>}
     </div>
   );
@@ -1389,3 +1613,5 @@ const AppRouter = () => {
 };
 
 export default AppRouter;
+
+

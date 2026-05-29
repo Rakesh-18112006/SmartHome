@@ -257,6 +257,9 @@ app.onExecute(async (body, headers) => {
             updates.on = params.on;
             if (topic.includes('smart-switch')) {
               mqttPayload.relayStatus = params.on ? 'ON' : 'OFF';
+            } else if (device.type === 'tunable-light' || device.type === 'tune light') {
+              topic = `tunable-light/${device.deviceId}/light/command`;
+              mqttPayload = { type: 'brightness', value: params.on ? 0 : 100 };
             } else {
               mqttPayload.state = params.on ? 'ON' : 'OFF';
             }
@@ -264,7 +267,12 @@ app.onExecute(async (body, headers) => {
           else if (commandType === 'action.devices.commands.BrightnessAbsolute') {
             const val255 = Math.round((params.brightness / 100) * 255);
             updates.brightness = val255;
-            mqttPayload.brightness = val255;
+            if (device.type === 'tunable-light' || device.type === 'tune light') {
+              topic = `tunable-light/${device.deviceId}/light/command`;
+              mqttPayload = { type: 'brightness', value: 100 - params.brightness };
+            } else {
+              mqttPayload.brightness = val255;
+            }
           } 
           else if (commandType === 'action.devices.commands.ColorAbsolute') {
             updates.spectrumRgb = params.color.spectrumRGB;

@@ -56,7 +56,34 @@ const Staircase = ({ socket, mqttStatus }) => {
   return (
     <div className="staircase-view">
       <div className="staircase-grid">
-        {/* LEFT: VISUALIZER */}
+        {/* LEFT: CONTROLS */}
+        <div className="staircase-panel controls-panel">
+
+          <h3>Tuning <SettingsIcon size={16} style={{marginLeft: '8px', verticalAlign: 'middle'}}/></h3>
+          <div className="slider-group">
+            <label>Max Brightness <span>{settings.maxBrightness}</span></label>
+            <input type="range" name="maxBrightness" min="10" max="255" value={settings.maxBrightness} onChange={handleSettingChange} />
+          </div>
+          <div className="slider-group">
+            <label>Fade Time (s) <span>{settings.fadeTime}</span></label>
+            <input type="range" name="fadeTime" min="0.1" max="5.0" step="0.1" value={settings.fadeTime} onChange={handleSettingChange} />
+          </div>
+          <div className="slider-group">
+            <label>Step Gap (s) <span>{settings.stepGap}</span></label>
+            <input type="range" name="stepGap" min="0.05" max="3.0" step="0.05" value={settings.stepGap} onChange={handleSettingChange} />
+          </div>
+          <div className="slider-group">
+            <label>FPS <span>{settings.fps}</span></label>
+            <input type="range" name="fps" min="5" max="60" value={settings.fps} onChange={handleSettingChange} />
+          </div>
+          <div className="slider-group">
+            <label>Auto-Off (s) <span>{settings.autoOffTimeout}</span></label>
+            <input type="range" name="autoOffTimeout" min="5" max="120" value={settings.autoOffTimeout} onChange={handleSettingChange} />
+          </div>
+
+        </div>
+
+        {/* RIGHT: VISUALIZER */}
         <div className="staircase-panel">
           <h3>Steps Visualizer</h3>
           <div className="staircase-bars">
@@ -83,33 +110,6 @@ const Staircase = ({ socket, mqttStatus }) => {
               );
             })}
           </div>
-        </div>
-
-        {/* RIGHT: CONTROLS */}
-        <div className="staircase-panel controls-panel">
-
-          <h3>Tuning <SettingsIcon size={16} style={{marginLeft: '8px', verticalAlign: 'middle'}}/></h3>
-          <div className="slider-group">
-            <label>Max Brightness <span>{settings.maxBrightness}</span></label>
-            <input type="range" name="maxBrightness" min="10" max="255" value={settings.maxBrightness} onChange={handleSettingChange} />
-          </div>
-          <div className="slider-group">
-            <label>Fade Time (s) <span>{settings.fadeTime}</span></label>
-            <input type="range" name="fadeTime" min="0.1" max="5.0" step="0.1" value={settings.fadeTime} onChange={handleSettingChange} />
-          </div>
-          <div className="slider-group">
-            <label>Step Gap (s) <span>{settings.stepGap}</span></label>
-            <input type="range" name="stepGap" min="0.05" max="3.0" step="0.05" value={settings.stepGap} onChange={handleSettingChange} />
-          </div>
-          <div className="slider-group">
-            <label>FPS <span>{settings.fps}</span></label>
-            <input type="range" name="fps" min="5" max="60" value={settings.fps} onChange={handleSettingChange} />
-          </div>
-          <div className="slider-group">
-            <label>Auto-Off (s) <span>{settings.autoOffTimeout}</span></label>
-            <input type="range" name="autoOffTimeout" min="5" max="120" value={settings.autoOffTimeout} onChange={handleSettingChange} />
-          </div>
-
         </div>
       </div>
     </div>

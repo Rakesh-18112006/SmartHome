@@ -1,6 +1,6 @@
 import express from 'express';
 import Automation from './Automation.js';
-import { getSensorData } from './automationEngine.js';
+import { getSensorData, resetRuleState } from './automationEngine.js';
 
 const router = express.Router();
 
@@ -48,6 +48,7 @@ router.put('/:id', async (req, res) => {
     if (!automation) {
       return res.status(404).json({ error: 'Automation not found' });
     }
+    resetRuleState(automation._id);
     console.log(`[API] Updated automation: "${automation.name}"`);
     res.json(automation);
   } catch (err) {

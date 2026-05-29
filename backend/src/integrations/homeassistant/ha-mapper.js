@@ -81,7 +81,7 @@ export function normalizeEntity(entity, registryData = null) {
         if (attributes.entity_picture.startsWith('http')) {
           base.albumArt = attributes.entity_picture;
         } else {
-          let baseUrl = 'http://192.168.0.168:8123';
+          let baseUrl = 'http://192.168.31.35.205:8123';
           if (process.env.HA_URL) {
             baseUrl = process.env.HA_URL.replace('ws://', 'http://').replace('wss://', 'https://').split('/api/websocket')[0];
           } else if (process.env.HA_BASE_URL) {
@@ -96,9 +96,10 @@ export function normalizeEntity(entity, registryData = null) {
       base.appName = attributes.app_name || '';
       base.sourceList = attributes.source_list || [];
       base.isMusicAssistant = (
-        (registryData && registryData.platform === 'music_assistant') || 
+        (registryData && (registryData.platform === 'music_assistant' || registryData.platform === 'mass')) || 
         entity.entity_id.includes('mass_') ||
-        entity.entity_id.includes('music_assistant')
+        entity.entity_id.includes('music_assistant') ||
+        !!attributes.mass_player_id
       );
 
       // Volume mapping (HA uses 0.0 - 1.0, map to 0-100)

@@ -22,6 +22,7 @@ import Room from './modules/rooms/Room.js';
 import roomsRoutes from './modules/rooms/rooms.routes.js';
 import googleSmartHomeRoutes from './integrations/google/googleSmartHome.routes.js';
 import sensorsRoutes from './modules/sensors/sensors.routes.js';
+import camerasRoutes from './modules/cameras/cameras.routes.js';
 import Sensor from './modules/sensors/Sensor.js';
 import { connectHomeAssistant } from './integrations/homeassistant/ha-client.js';
 
@@ -61,6 +62,7 @@ app.use('/api/devices', authMiddleware, devicesRoutes);
 app.use('/api/rooms', authMiddleware, roomsRoutes);
 app.use('/google', googleSmartHomeRoutes);
 app.use('/api/sensors', authMiddleware, sensorsRoutes);
+app.use('/api/cameras', camerasRoutes);
 
 // Image proxy for Home Assistant authenticated media
 app.get('/api/ha/image', async (req, res) => {
@@ -70,7 +72,7 @@ app.get('/api/ha/image', async (req, res) => {
     
     let targetUrl = url;
     if (url.startsWith('/')) {
-      let baseUrl = 'http://192.168.0.168:8123';
+      let baseUrl = 'http://192.168.31.35.205:8123';
       if (process.env.HA_URL) {
         baseUrl = process.env.HA_URL.replace('ws://', 'http://').replace('wss://', 'https://').split('/api/websocket')[0];
       }
