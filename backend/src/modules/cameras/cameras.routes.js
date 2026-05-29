@@ -1,7 +1,7 @@
 import express from 'express';
 import fetch from 'node-fetch';
 import jwt from 'jsonwebtoken';
-import { cachedHaStates } from '../../integrations/homeassistant/ha-client.js';
+import { cachedHaStates, requestCameraStream } from '../../integrations/homeassistant/ha-client.js';
 
 const router = express.Router();
 
@@ -16,7 +16,7 @@ const getHaHttpBase = () => {
 
 /**
  * Lightweight auth check that accepts token from query string OR Authorization header.
- * Required because <img src> tags cannot set Authorization headers.
+ * Required because <video src> or <img src> tags cannot set Authorization headers easily.
  */
 const streamAuth = (req, res, next) => {
   const token = req.query.token
@@ -54,8 +54,7 @@ router.get('/', streamAuth, (req, res) => {
           model: attrs.model_id || attrs.model || '',
           frontend_stream_type: attrs.frontend_stream_type || 'hls',
           supports_stream: attrs.supported_features !== undefined,
-          // Proxy URL through our backend to avoid CORS
-          stream_url: `/api/cameras/${encodeURIComponent(entityId)}/stream`,
+          hls_proxy_url: `/api/cameras/${encodeURIComponent(entityId)}/hls_url`,
           snapshot_url: `/api/cameras/${encodeURIComponent(entityId)}/snapshot`,
         });
       }
@@ -71,7 +70,6 @@ router.get('/', streamAuth, (req, res) => {
 /**
  * GET /api/cameras/:entityId/snapshot
  * Proxies the camera snapshot image from Home Assistant.
- * Uses streamAuth to accept token from query string (for <img> tags).
  */
 router.get('/:entityId/snapshot', streamAuth, async (req, res) => {
   try {
@@ -101,48 +99,19 @@ router.get('/:entityId/snapshot', streamAuth, async (req, res) => {
 });
 
 /**
- * GET /api/cameras/:entityId/stream
- * Proxies the MJPEG stream from Home Assistant.
- * HA exposes /api/camera_proxy_stream/<entity_id> as a multipart/x-mixed-replace MJPEG stream.
- * Uses streamAuth to accept token from query string (for <img> tags).
+ * GET /api/cameras/:entityId/hls_url
+ * Requests an HLS stream from HA and returns the relative path.
+ * We will use http-proxy-middleware to intercept /api/hls and forward it to HA.
  */
-router.get('/:entityId/stream', streamAuth, async (req, res) => {
+router.get('/:entityId/hls_url', streamAuth, async (req, res) => {
   try {
     const { entityId } = req.params;
-    const haBase = getHaHttpBase();
-    const token = process.env.HA_TOKEN;
-
-    const haRes = await fetch(`${haBase}/api/camera_proxy_stream/${entityId}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-
-    if (!haRes.ok) {
-      console.error(`[CAMERAS] HA stream error for ${entityId}: ${haRes.status} ${haRes.statusText}`);
-      return res.status(haRes.status).json({ error: 'Failed to fetch stream from HA' });
-    }
-
-    // Forward MJPEG multipart headers
-    const contentType = haRes.headers.get('content-type') || 'multipart/x-mixed-replace';
-    res.set('Content-Type', contentType);
-    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.set('Connection', 'keep-alive');
-
-    // Pipe the MJPEG stream directly to the client
-    haRes.body.pipe(res);
-
-    // Clean up when client disconnects
-    req.on('close', () => {
-      try {
-        haRes.body.destroy();
-      } catch (e) {
-        // Stream already closed
-      }
-    });
+    const hlsUrl = await requestCameraStream(entityId);
+    // Returns something like /api/hls/9f21d.../master_playlist.m3u8
+    res.json({ hls_url: hlsUrl });
   } catch (err) {
-    console.error('[CAMERAS] Stream proxy error:', err.message);
-    res.status(500).json({ error: 'Failed to proxy stream' });
+    console.error(`[CAMERAS] Failed to get HLS URL for ${req.params.entityId}:`, err.message);
+    res.status(500).json({ error: 'Failed to negotiate stream with HA' });
   }
 });
 

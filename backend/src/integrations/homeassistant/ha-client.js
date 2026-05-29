@@ -315,3 +315,20 @@ export const createHaArea = (roomName) => {
     }
   });
 };
+
+/**
+ * Requests an HLS stream URL for a specific camera entity using HA WebSocket.
+ * @param {string} entityId 
+ * @returns {Promise<string>} The HLS stream path
+ */
+export function requestCameraStream(entityId) {
+  return new Promise((resolve, reject) => {
+    sendMessage({ type: 'camera/stream', entity_id: entityId }, (res) => {
+      if (res && res.success && res.result && res.result.url) {
+        resolve(res.result.url);
+      } else {
+        reject(new Error(res ? res.error?.message || 'Failed to get stream' : 'Timeout'));
+      }
+    });
+  });
+}
