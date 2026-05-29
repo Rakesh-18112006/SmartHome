@@ -28,6 +28,7 @@ const DEVICE_COMMANDS = {
   plug: ['turn_on', 'turn_off'],
   curtain: ['turn_on', 'turn_off'],
   'touch-panel': ['turn_on', 'turn_off', 'set_speed'],
+  media_player: ['play_media', 'media_play', 'media_pause', 'volume_up', 'volume_down', 'turn_off'],
   default: ['turn_on', 'turn_off']
 };
 
@@ -122,6 +123,7 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
   const [toast, setToast] = useState(null);
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [currentRoom, setCurrentRoom] = useState(null);
+  const [mediaList, setMediaList] = useState([]);
 
   const findSceneRoom = useCallback((roomName) => {
     if (!roomName) return null;
@@ -327,7 +329,7 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
   const actionableDevices = (Array.isArray(allDevices) ? allDevices : []).filter((device) => {
     if (device?.isConfigured === false) return false;
     if (!device?.deviceId) return false;
-    if (device.type === 'media_player') return false;
+    // Support media_player explicitly
     const effectiveType = device.type === 'touch-panel' || (Array.isArray(device.subDevices) && device.subDevices.length > 0)
       ? 'touch-panel'
       : device.type;
@@ -338,6 +340,31 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
     if (selectedRuleRoom === 'Global') return true;
     return device.room === selectedRuleRoom;
   });
+
+  useEffect(() => {
+    if (showModal && socket && mediaList.length === 0) {
+      const firstMediaPlayer = actionableDevices.find(d => d.type === 'media_player');
+      if (firstMediaPlayer) {
+        // Fetch local media directory directly to populate the song list
+        socket.emit('ha_browse_media', { 
+          entity_id: firstMediaPlayer.deviceId,
+          media_content_type: 'app',
+          media_content_id: 'media-source://media_source/local/'
+        }, (res) => {
+          if (res?.result?.children) {
+            setMediaList(res.result.children);
+          } else {
+            // Fallback to root if local media source fails
+            socket.emit('ha_browse_media', { entity_id: firstMediaPlayer.deviceId }, (rootRes) => {
+              if (rootRes?.result?.children) {
+                setMediaList(rootRes.result.children);
+              }
+            });
+          }
+        });
+      }
+    }
+  }, [showModal, actionableDevices, socket, mediaList.length]);
 
   const isTouchPanelDevice = (device) =>
     Boolean(device) && (device.type === 'touch-panel' || (Array.isArray(device.subDevices) && device.subDevices.length > 0) || device.deviceId?.startsWith('BSQ'));
@@ -477,6 +504,13 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
         ...a[i],
         params: { ...a[i].params, color: hueToRgb(val) },
       };
+    } else if (field === 'media_content') {
+      let parsed = null;
+      try { parsed = JSON.parse(val); } catch(e) {}
+      a[i] = {
+        ...a[i],
+        params: { ...a[i].params, media_content_type: parsed?.media_content_type, media_content_id: parsed?.media_content_id },
+      };
     } else {
       a[i] = { ...a[i], [field]: val };
     }
@@ -498,6 +532,9 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
       if (c === 'turn_on') return 'Open';
       if (c === 'turn_off') return 'Close';
     }
+    if (c === 'play_media') return 'Play Specific Song';
+    if (c === 'media_play') return 'Resume Playing';
+    if (c === 'media_pause') return 'Pause Music';
     return c.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
@@ -600,11 +637,18 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
           <div className="welcome-header">
             <button className="action-btn-pill primary" onClick={openCreate}><img src="/icons/icons/Plus-White.svg" alt="Add" style={{width: 16, height: 16}} /> New Rule</button>
           </div>
-          <div className="rules-grid">
-            {(Array.isArray(rules) ? rules : []).filter(r => (r.room === 'Global' || (currentRoom && r.room === currentRoom.name))).map(rule => (
+          
+          {(() => {
+            const filteredRules = (Array.isArray(rules) ? rules : []).filter(r => (r.room === 'Global' || (currentRoom && r.room === currentRoom.name)));
+            const musicRules = filteredRules.filter(r => r.actions.some(a => a.targetDeviceId?.startsWith('media_player.')));
+            const standardRules = filteredRules.filter(r => !r.actions.some(a => a.targetDeviceId?.startsWith('media_player.')));
+
+            const renderRuleCard = (rule) => (
               <div className={`rule-card glass ${rule.enabled ? '' : 'disabled'}`} key={rule._id}>
                 <div className="card-top">
-                  <div className="card-icon"><img src="/icons/icons/WIFI-White.svg" alt="Rule" style={{width: 24, height: 24}} /></div>
+                  <div className="card-icon">
+                    <img src={rule.actions.some(a => a.targetDeviceId?.startsWith('media_player.')) ? "/icons/icons/Speaker-White.svg" : "/icons/icons/WIFI-White.svg"} alt="Rule" style={{width: 24, height: 24}} />
+                  </div>
                   <div className="scene-card-actions">
                     <button className="action-btn-scene" onClick={() => openEdit(rule)}><img src="/icons/icons/Edit.svg" alt="Edit" style={{width: 14, height: 14}} /></button>
                     <button className="action-btn-scene delete" onClick={() => deleteRule(rule._id)}><img src="/icons/icons/Delete.svg" alt="Delete" style={{width: 14, height: 14}} /></button>
@@ -627,8 +671,38 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
                   </button>
                 </div>
               </div>
-            ))}
-          </div>
+            );
+
+            return (
+              <>
+                {standardRules.length > 0 && (
+                  <div className="rules-grid">
+                    {standardRules.map(renderRuleCard)}
+                  </div>
+                )}
+                
+                <div className="welcome-header" style={{ marginTop: '40px', marginBottom: '16px' }}>
+                  <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-main)' }}>Music Scenes</h2>
+                </div>
+                {musicRules.length > 0 ? (
+                  <div className="rules-grid">
+                    {musicRules.map(renderRuleCard)}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '30px', background: 'var(--bg-card)', borderRadius: '12px', border: '1px dashed var(--border)', color: 'var(--text-muted)' }}>
+                    <p style={{ margin: 0 }}>No music scenes created yet.</p>
+                    <p style={{ margin: '8px 0 0 0', fontSize: '13px' }}>Click "New Rule" and select a speaker to build your first music automation!</p>
+                  </div>
+                )}
+
+                {filteredRules.length === 0 && musicRules.length === 0 && standardRules.length === 0 && (
+                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                    No automations found in this room.
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 
@@ -741,6 +815,7 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
                   const cmds = DEVICE_COMMANDS[getDeviceCommandType(selectedDevice, selectedSubDevice)] || DEVICE_COMMANDS.default;
                   const showSubDeviceDropdown = isTouchPanelDevice(selectedDevice);
                   const showFanSpeedPresetDropdown = selectedSubDevice?.type === 'fan';
+                  const showMediaDropdown = selectedDevice?.type === 'media_player' && a.command === 'play_media';
                   const visibleCmds = showFanSpeedPresetDropdown
                     ? cmds.filter((command) => command !== 'set_speed')
                     : cmds;
@@ -764,9 +839,11 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
                       <div
                         className="action-main scene-action-controls"
                         style={{
-                          gridTemplateColumns: showSubDeviceDropdown
-                            ? (showFanSpeedPresetDropdown ? '1.1fr 1fr 1fr 0.9fr' : '1.2fr 1fr 1fr')
-                            : '1fr 1fr'
+                          gridTemplateColumns: showMediaDropdown 
+                            ? '1fr 0.8fr 1.2fr'
+                            : showSubDeviceDropdown
+                              ? (showFanSpeedPresetDropdown ? '1.1fr 1fr 1fr 0.9fr' : '1.2fr 1fr 1fr')
+                              : '1fr 1fr'
                         }}
                       >
                         <select
@@ -806,7 +883,22 @@ const Scenes = ({ socket, rooms, allDevices, sensors, onAddRoom }) => {
                             onChange={e => updateAction(i, 'fanSpeedPreset', e.target.value)}
                           >
                             {[1, 2, 3, 4, 5].map((speed) => (
-                              <option key={speed} value={speed}>Speed {speed}</option>
+                              <option key={speed} value={speed}>Level {speed}</option>
+                            ))}
+                          </select>
+                        )}
+                        {showMediaDropdown && (
+                          <select
+                            className="premium-select"
+                            style={{ padding: '6px 10px', borderRadius: '6px', fontSize: '12px', height: '32px' }}
+                            value={a.params?.media_content_id ? JSON.stringify({ media_content_type: a.params.media_content_type, media_content_id: a.params.media_content_id }) : ''}
+                            onChange={e => updateAction(i, 'media_content', e.target.value)}
+                          >
+                            <option value="">Select Song/Playlist</option>
+                            {mediaList.map((media) => (
+                              <option key={media.media_content_id} value={JSON.stringify({ media_content_type: media.media_content_type, media_content_id: media.media_content_id })}>
+                                {media.title}
+                              </option>
                             ))}
                           </select>
                         )}
