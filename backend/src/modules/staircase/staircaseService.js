@@ -1,6 +1,6 @@
 import { getMqttClient, publishToTopic } from '../../integrations/mqtt/mqttManager.js';
 
-const TOTAL_STEPS = 24;
+const TOTAL_STEPS = 28;
 let io = null;
 
 let settings = {

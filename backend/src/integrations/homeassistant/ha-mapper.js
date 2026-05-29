@@ -96,9 +96,10 @@ export function normalizeEntity(entity, registryData = null) {
       base.appName = attributes.app_name || '';
       base.sourceList = attributes.source_list || [];
       base.isMusicAssistant = (
-        (registryData && registryData.platform === 'music_assistant') || 
+        (registryData && (registryData.platform === 'music_assistant' || registryData.platform === 'mass')) || 
         entity.entity_id.includes('mass_') ||
-        entity.entity_id.includes('music_assistant')
+        entity.entity_id.includes('music_assistant') ||
+        !!attributes.mass_player_id
       );
 
       // Volume mapping (HA uses 0.0 - 1.0, map to 0-100)

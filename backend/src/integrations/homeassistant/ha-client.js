@@ -1,4 +1,8 @@
 import WebSocket from 'ws';
+import fetch from 'node-fetch';
+import Device from '../../modules/devices/Device.js';
+import Sensor from '../../modules/sensors/Sensor.js';
+import mongoose from 'mongoose';
 import { normalizeEntity } from './ha-mapper.js';
 
 let haSocket = null;
@@ -113,17 +117,56 @@ export const connectHomeAssistant = (io) => {
       // Handle Registry Updates
       if (eventType === 'area_registry_updated') {
         sendMessage({ type: 'config/area_registry/list' }, (res) => {
-          if (res.result) res.result.forEach(a => areaRegistry[a.area_id] = a.name);
+          if (res.result) {
+            res.result.forEach(a => areaRegistry[a.area_id] = a.name);
+            recalculateRooms(io);
+          }
         });
       } else if (eventType === 'device_registry_updated') {
-        sendMessage({ type: 'config/device_registry/list' }, (res) => {
-          if (res.result) res.result.forEach(d => deviceRegistry[d.id] = { area_id: d.area_id, manufacturer: d.manufacturer });
+        sendMessage({ type: 'config/device_registry/list' }, async (res) => {
+          if (res.result) {
+            res.result.forEach(d => deviceRegistry[d.id] = { area_id: d.area_id, manufacturer: d.manufacturer, identifiers: d.identifiers });
+            recalculateRooms(io);
+
+            // Two-Way Sync: Update MongoDB for Coral Innovations devices that were moved in HA
+            const coralDevices = res.result.filter(d => d.manufacturer === 'Coral Innovations');
+            for (const d of coralDevices) {
+              const mqttId = d.identifiers?.find(i => i[0] === 'mqtt')?.[1];
+              if (!mqttId) continue;
+              
+              const roomName = d.area_id ? areaRegistry[d.area_id] : 'Unassigned';
+              if (!roomName) continue;
+              
+              try {
+                const device = await Device.findOne({ deviceId: mqttId });
+                if (device && device.room !== roomName) {
+                  console.log(`[HA SYNC] Moving Device ${mqttId} from ${device.room} to ${roomName} based on HA changes`);
+                  await Device.updateOne({ deviceId: mqttId }, { $set: { room: roomName } });
+                  if (io) {
+                    const updatedDevice = await Device.findOne({ deviceId: mqttId });
+                    io.emit('device_state_update', updatedDevice);
+                  }
+                } else if (mongoose.Types.ObjectId.isValid(mqttId)) {
+                  const sensor = await Sensor.findById(mqttId);
+                  if (sensor && sensor.room !== roomName) {
+                    console.log(`[HA SYNC] Moving Sensor ${mqttId} from ${sensor.room} to ${roomName} based on HA changes`);
+                    await Sensor.updateOne({ _id: mqttId }, { $set: { room: roomName } });
+                  }
+                }
+              } catch (err) {
+                console.error('[HA SYNC] Error syncing room:', err.message);
+              }
+            }
+          }
         });
       } else if (eventType === 'entity_registry_updated') {
         sendMessage({ type: 'config/entity_registry/list' }, (res) => {
-          if (res.result) res.result.forEach(e => {
-            entityRegistry[e.entity_id] = { device_id: e.device_id, area_id: e.area_id, config_entry_id: e.config_entry_id, platform: e.platform };
-          });
+          if (res.result) {
+            res.result.forEach(e => {
+              entityRegistry[e.entity_id] = { device_id: e.device_id, area_id: e.area_id, config_entry_id: e.config_entry_id, platform: e.platform };
+            });
+            recalculateRooms(io);
+          }
         });
       }
 
@@ -176,6 +219,22 @@ export const connectHomeAssistant = (io) => {
     console.error('❌ Home Assistant WebSocket Error:', err.message);
   });
 };
+
+function recalculateRooms(io) {
+  for (const [entityId, normalized] of cachedHaStates.entries()) {
+    const ent = entityRegistry[entityId];
+    let areaId = null;
+    if (ent) {
+      const dev = ent.device_id ? deviceRegistry[ent.device_id] : null;
+      areaId = ent.area_id || (dev ? dev.area_id : null);
+    }
+    const newRoom = areaId && areaRegistry[areaId] ? areaRegistry[areaId] : 'Home Assistant';
+    if (normalized.room !== newRoom) {
+      normalized.room = newRoom;
+      if (io) io.emit('ha_entity_state_change', normalized);
+    }
+  }
+}
 
 /**
  * Send a command to Home Assistant and optionally wait for a callback

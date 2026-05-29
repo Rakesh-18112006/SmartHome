@@ -21,6 +21,14 @@ const conditionSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.Mixed,
     required: true,
   },
+  startTime: {
+    type: String, // format: "HH:mm"
+    default: '',
+  },
+  endTime: {
+    type: String, // format: "HH:mm"
+    default: '',
+  },
 }, { _id: false });
 
 const actionSchema = new mongoose.Schema({

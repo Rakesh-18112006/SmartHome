@@ -61,9 +61,36 @@ export function isEngineExecuting() {
 }
 
 /**
+ * Reset the edge-trigger state for a specific rule.
+ * Call this when a rule is updated so it can trigger again.
+ */
+export function resetRuleState(ruleId) {
+  _previousConditionState.delete(ruleId.toString());
+}
+
+/**
  * Evaluate a single condition against current sensor data.
  */
 function evaluateCondition(condition) {
+  // Check optional time bounds first
+  if (condition.startTime && condition.endTime) {
+    const now = new Date();
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+    
+    const [startH, startM] = condition.startTime.split(':').map(Number);
+    const startMins = startH * 60 + startM;
+    
+    const [endH, endM] = condition.endTime.split(':').map(Number);
+    const endMins = endH * 60 + endM;
+    
+    if (startMins <= endMins) {
+      if (currentMins < startMins || currentMins > endMins) return false;
+    } else {
+      // Overnight (e.g. 20:00 to 06:00)
+      if (currentMins < startMins && currentMins > endMins) return false;
+    }
+  }
+
   const currentValue = sensorData[condition.sensor];
   if (currentValue === undefined) return false;
 
