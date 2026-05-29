@@ -5,6 +5,18 @@ const SensorCard = ({ sensor, onRemove }) => {
   const formatValue = (val) => {
     if (val === null || val === undefined) return '--';
     
+    if (typeof val === 'boolean') {
+      return val ? 'Detected' : 'Clear';
+    }
+
+    if (val === 1 || val === '1' || val === 'ON' || val === 'on') {
+      return 'Detected';
+    }
+    
+    if (val === 0 || val === '0' || val === 'OFF' || val === 'off') {
+      return 'Clear';
+    }
+
     // If it's an object, try to extract 'value', 'data', or the first numeric key
     if (typeof val === 'object') {
       if (val.value !== undefined) return val.value;

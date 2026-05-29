@@ -1020,6 +1020,7 @@
   .player-info {
     min-width: 0;
     flex: 1;
+    padding-right: 70px; /* Leave space for Queue and Players buttons */
   }
 
   .player-title {
@@ -1055,8 +1056,15 @@
     min-width: 32px;
   }
 
-  /* Hide desktop volume, use phone hardware buttons */
+  /* Position extra buttons (Queue, Players) on the right, hide volume */
   .player-extra {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    gap: 0.25rem;
+  }
+  
+  .volume-control {
     display: none;
   }
 

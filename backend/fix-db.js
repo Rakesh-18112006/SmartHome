@@ -6,7 +6,7 @@ dotenv.config();
 import Device from './src/modules/devices/Device.js';
 import Sensor from './src/modules/sensors/Sensor.js';
 
-const HA_URL = process.env.HA_URL || 'ws://192.168.0.205:8123/api/websocket';
+const HA_URL = process.env.HA_URL || 'ws://192.168.31.35.205:8123/api/websocket';
 const HA_TOKEN = process.env.HA_TOKEN;
 
 async function run() {

@@ -2,7 +2,7 @@ import WebSocket from 'ws';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const ws = new WebSocket(process.env.HA_URL || 'ws://192.168.0.205:8123/api/websocket');
+const ws = new WebSocket(process.env.HA_URL || 'ws://192.168.31.35.205:8123/api/websocket');
 let messageId = 1;
 
 ws.on('open', () => console.log('Connected'));

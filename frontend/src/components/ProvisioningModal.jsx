@@ -82,18 +82,20 @@ const ProvisioningModal = ({ isOpen, onClose, onFinish }) => {
     setTimeout(() => {
       setIsConnecting(false);
       const deviceId = formData.deviceId || `esp-${Math.random().toString(16).slice(2, 6)}`;
-      const type = (formData.label || 'Tune light').toLowerCase();
+      let type = (formData.label || 'Tune light').toLowerCase();
+      if (type === 'touch panel') type = 'touch-panel';
+      if (type === 'tune light') type = 'tunable-light';
+      
       onFinish({
         deviceId: deviceId.trim(),
         title: formData.title || `My ${formData.label || 'Device'}`,
-        type: type === 'touch panel' ? 'touch-panel' : type,
-        icon: formData.icon,
+        type: type,
         room: formData.room,
         isConfigured: true,
-        topic: type === 'touch panel' 
+        topic: type === 'touch-panel' 
           ? `touch-panel/${deviceId.trim()}/switch/status` 
           : `smarthome/${type}/${deviceId.trim()}`,
-        subDevices: type === 'touch panel' ? subDevices : []
+        subDevices: type === 'touch-panel' ? subDevices : []
       });
       setStep(1);
       setFormData({ ...formData, title: '', ssid: '', password: '', room: 'Unassigned', numSwitches: 1, numFans: 0 });

@@ -53,6 +53,7 @@ import Staircase from './components/Staircase';
 import MusicHome from './components/MusicHome';
 import AudioDevicesTab from './components/AudioDevicesTab';
 import { getDeviceIconLabel, getDeviceIconSrc } from './deviceIcons';
+import Surveillance from './components/Surveillance';
 
 // Dynamic API Base URL for network access
 const API_BASE = `http://${window.location.hostname}:3000`;
@@ -580,7 +581,7 @@ const Dashboard = () => {
   const renderDetailView = () => {
     if (!selectedDevice) return null;
 
-    const isLight = selectedDevice.type === 'light' || selectedDevice.type === 'rgbw';
+    const isLight = selectedDevice.type === 'light' || selectedDevice.type === 'rgbw' || selectedDevice.type === 'tunable-light' || selectedDevice.type === 'tune light';
     const isTouchPanel = selectedDevice.type === 'touch-panel' || selectedDevice.deviceId.startsWith('BSQ');
     const isPlug = selectedDevice.type === 'plug' || selectedDevice.type === 'switch' || selectedDevice.deviceId.startsWith('BSP');
     const isEnergyMonitor = selectedDevice.deviceId.startsWith('B1E') || selectedDevice.deviceId.startsWith('B3E') || selectedDevice.deviceId.startsWith('BSP');
@@ -1133,12 +1134,66 @@ const Dashboard = () => {
                   </div>
                 )}
                 
-                <MusicDeck 
-                  socket={socket}
-                  players={(Array.isArray(devices) ? devices : []).filter(d => d.room === currentRoom.name && d.type === 'media_player' && d.deviceClass !== 'tv')} 
-                  allMediaPlayers={(Array.isArray(devices) ? devices : []).filter(d => d.type === 'media_player')}
-                  onCommand={handleMediaCommand} 
-                />
+                {(() => {
+                  const roomPlayers = (Array.isArray(devices) ? devices : []).filter(d => d.room === currentRoom.name && d.type === 'media_player' && d.deviceClass !== 'tv');
+                  const allMediaPlayers = (Array.isArray(devices) ? devices : []).filter(d => d.type === 'media_player');
+                  
+                  const normalizeEntityBase = (id) => (id || '').replace('media_player.', '').replace(/^mass_/, '').toLowerCase().trim();
+                  const uniquePlayersMap = new Map();
+                  
+                  roomPlayers.forEach(p => {
+                    const normTitle = (p.title || '').toLowerCase().trim();
+                    const normBase = normalizeEntityBase(p.deviceId);
+                    const titleLooksLikeEntityId = normTitle.includes('media_player.') || (normTitle.includes('_') && !normTitle.includes(' '));
+                    
+                    const existingByTitle = !titleLooksLikeEntityId && uniquePlayersMap.get('title:' + normTitle);
+                    const existingByBase = uniquePlayersMap.get('base:' + normBase);
+                    
+                    if (existingByTitle) {
+                      if (p.isMusicAssistant && !existingByTitle.isMusicAssistant) {
+                        uniquePlayersMap.set('title:' + normTitle, p);
+                        uniquePlayersMap.set('base:' + normalizeEntityBase(existingByTitle.deviceId), p);
+                        uniquePlayersMap.set('base:' + normBase, p);
+                      }
+                    } else if (existingByBase) {
+                      const existingTitleLooksRaw = (existingByBase.title || '').includes('_') && !(existingByBase.title || '').includes(' ');
+                      if (p.isMusicAssistant && !existingByBase.isMusicAssistant) {
+                        uniquePlayersMap.set('base:' + normBase, p);
+                        if (!titleLooksLikeEntityId) uniquePlayersMap.set('title:' + normTitle, p);
+                      } else if (!titleLooksLikeEntityId && existingTitleLooksRaw) {
+                        uniquePlayersMap.set('base:' + normBase, p);
+                        uniquePlayersMap.set('title:' + normTitle, p);
+                      }
+                    } else {
+                      uniquePlayersMap.set('base:' + normBase, p);
+                      if (!titleLooksLikeEntityId) uniquePlayersMap.set('title:' + normTitle, p);
+                    }
+                  });
+                  
+                  const seen = new Set();
+                  const uniquePlayers = [];
+                  for (const [key, p] of uniquePlayersMap) {
+                    if (key.startsWith('base:') && !seen.has(p.deviceId)) {
+                      seen.add(p.deviceId);
+                      uniquePlayers.push(p);
+                    }
+                  }
+
+                  return (
+                    <div className="room-music-decks" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {uniquePlayers.map(player => (
+                        <MusicDeck 
+                          key={player.deviceId}
+                          forcedPlayerId={player.deviceId}
+                          socket={socket}
+                          players={roomPlayers} 
+                          allMediaPlayers={allMediaPlayers}
+                          onCommand={handleMediaCommand} 
+                        />
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 <div className="devices-grid">
                   {(Array.isArray(devices) ? devices : []).filter(d => d.room === currentRoom.name && d.isConfigured && d.type !== 'media_player').map(device => (
@@ -1512,6 +1567,7 @@ const Dashboard = () => {
               {activeTab === 'devices' && renderDevicesView()}
               {activeTab === 'audio-devices' && <AudioDevicesTab socket={socket} allMediaPlayers={(Array.isArray(devices) ? devices : []).filter(d => d.type === 'media_player')} />}
               {activeTab === 'staircase' && <Staircase socket={socket} mqttStatus={mqttStatus} />}
+              {activeTab === 'surveillance' && <Surveillance />}
               {activeTab === 'settings' && renderSettingsView()}
             </>
           )}

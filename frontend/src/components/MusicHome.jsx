@@ -56,6 +56,7 @@ export default function MusicHome() {
           mediaPositionUpdatedAt: haDevice.raw?.attributes?.media_position_updated_at,
           isMusicAssistant: haDevice.isMusicAssistant || haDevice.raw?.attributes?.app_id === 'music_assistant',
           supportsBrowse: haDevice.supportsBrowse || !!(haDevice.raw?.attributes?.supported_features & 131072),
+          groupMembers: haDevice.raw?.attributes?.group_members || [],
         };
         
         if (idx >= 0) {
@@ -67,12 +68,19 @@ export default function MusicHome() {
       });
     };
 
+    const handleConnect = () => {
+      socket.emit('request_initial_states');
+    };
+
     socket.on('ha_entity_state_change', handleStateChange);
+    socket.on('connect', handleConnect);
     
+    // Request immediately in case we're already connected
     socket.emit('request_initial_states');
 
     return () => {
       socket.off('ha_entity_state_change', handleStateChange);
+      socket.off('connect', handleConnect);
     };
   }, []);
 
@@ -393,14 +401,14 @@ export default function MusicHome() {
       });
     }
     
-    // Clear optimistic state after a delay
+    // Clear optimistic state after a delay (give HA time to process and sync back)
     setTimeout(() => {
       setOptimisticGroups(prev => {
         const next = { ...prev };
         delete next[otherPlayerId];
         return next;
       });
-    }, 2500);
+    }, 8000);
   };
 
   const handleSetPlayerVolume = (targetPlayerId, volPercent) => {
@@ -682,23 +690,75 @@ export default function MusicHome() {
             {/* Other Speakers */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '300px', overflowY: 'auto', paddingRight: '8px' }}>
               {(() => {
+                // Build a map keyed by normalized entity base ID to merge duplicates
                 const uniquePlayersMap = new Map();
+                
+                const normalizeEntityBase = (id) => {
+                  // Strip "media_player." and "mass_" prefix only
+                  return (id || '')
+                    .replace('media_player.', '')
+                    .replace(/^mass_/, '')
+                    .toLowerCase().trim();
+                };
+                
                 players.forEach(p => {
                   const normTitle = (p.title || '').toLowerCase().trim();
-                  if (uniquePlayersMap.has(normTitle)) {
-                    const existing = uniquePlayersMap.get(normTitle);
-                    if (p.isMusicAssistant && !existing.isMusicAssistant) {
-                      uniquePlayersMap.set(normTitle, p);
+                  const normBase = normalizeEntityBase(p.deviceId);
+                  
+                  // Check if this is a raw entity_id being used as a title (no spaces, has underscores/dots)
+                  const titleLooksLikeEntityId = normTitle.includes('media_player.') || 
+                    (normTitle.includes('_') && !normTitle.includes(' '));
+                  
+                  // Try to merge by title first, then by entity base
+                  const existingByTitle = !titleLooksLikeEntityId && uniquePlayersMap.get('title:' + normTitle);
+                  const existingByBase = uniquePlayersMap.get('base:' + normBase);
+                  
+                  if (existingByTitle) {
+                    // Same friendly title — prefer MA version
+                    if (p.isMusicAssistant && !existingByTitle.isMusicAssistant) {
+                      uniquePlayersMap.set('title:' + normTitle, p);
+                      // Also update the base key
+                      uniquePlayersMap.set('base:' + normalizeEntityBase(existingByTitle.deviceId), p);
+                      uniquePlayersMap.set('base:' + normBase, p);
                     }
+                  } else if (existingByBase) {
+                    // Same physical speaker (matched by entity base) — prefer the one with a friendly name
+                    const existingTitleLooksRaw = (existingByBase.title || '').includes('_') && !(existingByBase.title || '').includes(' ');
+                    if (p.isMusicAssistant && !existingByBase.isMusicAssistant) {
+                      // Replace with MA version
+                      uniquePlayersMap.set('base:' + normBase, p);
+                      if (!titleLooksLikeEntityId) uniquePlayersMap.set('title:' + normTitle, p);
+                    } else if (!titleLooksLikeEntityId && existingTitleLooksRaw) {
+                      // Current has friendly name, existing has raw — replace
+                      uniquePlayersMap.set('base:' + normBase, p);
+                      uniquePlayersMap.set('title:' + normTitle, p);
+                    }
+                    // Otherwise keep existing
                   } else {
-                    uniquePlayersMap.set(normTitle, p);
+                    // New player
+                    uniquePlayersMap.set('base:' + normBase, p);
+                    if (!titleLooksLikeEntityId) uniquePlayersMap.set('title:' + normTitle, p);
                   }
                 });
-                const uniquePlayers = Array.from(uniquePlayersMap.values());
+                
+                // Collect unique players (deduplicate the values since multiple keys point to same player)
+                const seen = new Set();
+                const uniquePlayers = [];
+                for (const [key, p] of uniquePlayersMap) {
+                  if (key.startsWith('base:') && !seen.has(p.deviceId)) {
+                    seen.add(p.deviceId);
+                    uniquePlayers.push(p);
+                  }
+                }
                 return uniquePlayers;
               })()
                 .filter(p => p.deviceId !== activePlayer.deviceId)
                 .filter(p => !activePlayer.isMusicAssistant || p.isMusicAssistant)
+                .filter(p => {
+                  // Hide speakers whose title is just a raw entity_id (e.g. "media_player.living_room_back_left_1")
+                  const t = (p.title || '').trim();
+                  return !(t.startsWith('media_player.') || (t.includes('_') && !t.includes(' ')));
+                })
                 .sort((a, b) => {
                   const groupMembers = activePlayer.groupMembers || [];
                   const aGrouped = optimisticGroups[a.deviceId] !== undefined ? optimisticGroups[a.deviceId] : groupMembers.includes(a.deviceId);

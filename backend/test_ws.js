@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client';
-const socket = io('http://192.168.0.205:3000');
+const socket = io('http://192.168.31.35.205:3000');
 socket.on('connect', () => console.log('connected'));
 socket.on('initial_state', (data) => {
   const players = data.devices.filter(d => d.capabilities && d.capabilities.includes('media_control'));

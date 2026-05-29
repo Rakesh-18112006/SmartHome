@@ -81,7 +81,7 @@ export function normalizeEntity(entity, registryData = null) {
         if (attributes.entity_picture.startsWith('http')) {
           base.albumArt = attributes.entity_picture;
         } else {
-          let baseUrl = 'http://192.168.0.205:8123';
+          let baseUrl = 'http://192.168.31.35.205:8123';
           if (process.env.HA_URL) {
             baseUrl = process.env.HA_URL.replace('ws://', 'http://').replace('wss://', 'https://').split('/api/websocket')[0];
           } else if (process.env.HA_BASE_URL) {

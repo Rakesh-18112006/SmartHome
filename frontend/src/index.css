@@ -2573,3 +2573,406 @@ button:active {
 
 .spin { animation: spin 1.5s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ═══════════════════════════════════════════════════════
+   SURVEILLANCE PAGE
+   ═══════════════════════════════════════════════════════ */
+
+.surveillance-page {
+  padding: 0;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background: var(--bg);
+}
+
+.surveillance-page:-webkit-full-screen,
+.surveillance-page:fullscreen {
+  background: #000;
+  padding: 16px;
+}
+
+/* ── Header ── */
+.surveillance-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.surveillance-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.surveillance-title-group h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.surveillance-subtitle {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin: 2px 0 0 0;
+}
+
+.surv-back-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.surv-back-btn:hover { background: var(--primary); }
+
+.surveillance-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.layout-toggle-group {
+  display: flex;
+  background: var(--surface);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.layout-btn {
+  padding: 7px 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.layout-btn.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.surv-action-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.surv-action-btn:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+/* ── Camera Grid ── */
+.surveillance-grid {
+  display: grid;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+
+.surveillance-grid.cam-count-1 { grid-template-columns: 1fr; }
+.surveillance-grid.cam-count-2 { grid-template-columns: repeat(2, 1fr); }
+.surveillance-grid.cam-count-3 { grid-template-columns: repeat(2, 1fr); }
+.surveillance-grid.cam-count-4 { grid-template-columns: repeat(2, 1fr); }
+.surveillance-grid.cam-count-5,
+.surveillance-grid.cam-count-6 { grid-template-columns: repeat(3, 1fr); }
+.surveillance-grid.cam-count-7,
+.surveillance-grid.cam-count-8,
+.surveillance-grid.cam-count-9 { grid-template-columns: repeat(3, 1fr); }
+
+/* ── Camera Feed Card ── */
+.surveillance-feed {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #0a0a0a;
+  cursor: pointer;
+  aspect-ratio: 16 / 9;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+}
+
+.surveillance-feed:hover {
+  transform: scale(1.015);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.25);
+}
+
+.surveillance-feed.expanded {
+  cursor: default;
+  border-radius: 16px;
+  aspect-ratio: auto;
+  height: 100%;
+  max-height: 70vh;
+}
+.surveillance-feed.expanded:hover {
+  transform: none;
+}
+
+.feed-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #111;
+}
+
+.camera-stream {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.surveillance-feed.expanded .camera-stream {
+  object-fit: contain;
+}
+
+.stream-error-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(0,0,0,0.75);
+  color: #999;
+  font-size: 0.85rem;
+}
+
+/* ── Feed Overlay (name, badges) ── */
+.feed-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 14px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.8));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.feed-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.feed-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #666;
+  flex-shrink: 0;
+}
+.feed-status-dot.live {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.feed-name {
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+
+.feed-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.recording-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: rgba(239, 68, 68, 0.85);
+  color: #fff;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.rec-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+
+.feed-state-badge {
+  padding: 3px 8px;
+  background: rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.8);
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: capitalize;
+  backdrop-filter: blur(4px);
+}
+
+/* ── Single Camera View ── */
+.surveillance-single-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+}
+
+.camera-info-panel {
+  padding: 20px;
+  border-radius: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.info-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-secondary);
+}
+
+.info-value {
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.info-value.mono {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 0.82rem;
+}
+
+.info-value.status-idle, .info-value.status-streaming {
+  color: #22c55e;
+}
+.info-value.status-recording {
+  color: #ef4444;
+}
+
+.info-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* ── Loading / Empty States ── */
+.surveillance-loading,
+.surveillance-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 400px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.surveillance-loading p,
+.surveillance-empty p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+.surveillance-empty h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: var(--text);
+}
+
+.loading-spinner-cam {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.retry-btn {
+  padding: 10px 24px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.retry-btn:hover { background: var(--primary-dark); }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .surveillance-header {
+    padding: 0;
+  }
+  .surveillance-title-group h2 {
+    font-size: 1.2rem;
+  }
+  .surveillance-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px;
+  }
+  .surveillance-feed {
+    border-radius: 10px;
+  }
+  .camera-info-panel {
+    grid-template-columns: 1fr 1fr;
+  }
+  .surveillance-feed.expanded {
+    max-height: 50vh;
+  }
+}
+
+@media (max-width: 480px) {
+  .camera-info-panel {
+    grid-template-columns: 1fr;
+  }
+}
+

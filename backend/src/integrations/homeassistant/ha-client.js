@@ -163,9 +163,28 @@ export const connectHomeAssistant = (io) => {
         sendMessage({ type: 'config/entity_registry/list' }, (res) => {
           if (res.result) {
             res.result.forEach(e => {
-              entityRegistry[e.entity_id] = { device_id: e.device_id, area_id: e.area_id, config_entry_id: e.config_entry_id, platform: e.platform };
+              entityRegistry[e.entity_id] = { device_id: e.device_id, area_id: e.area_id, config_entry_id: e.config_entry_id, platform: e.platform, name: e.name || e.original_name };
             });
             recalculateRooms(io);
+            
+            // Re-fetch states to catch updated friendly names since registry updates
+            // don't always trigger an immediate state_changed event
+            sendMessage({ type: 'get_states' }, (stateRes) => {
+              if (stateRes.result) {
+                stateRes.result.forEach(entity => {
+                  const ent = entityRegistry[entity.entity_id];
+                  const normalized = normalizeEntity(entity, ent);
+                  if (normalized.capabilities && normalized.capabilities.length > 0) {
+                    const existing = cachedHaStates.get(normalized.entity_id);
+                    // Only broadcast if the name or room actually changed
+                    if (!existing || existing.name !== normalized.name || existing.room !== normalized.room) {
+                      cachedHaStates.set(normalized.entity_id, normalized);
+                      if (io) io.emit('ha_entity_state_change', normalized);
+                    }
+                  }
+                });
+              }
+            });
           }
         });
       }

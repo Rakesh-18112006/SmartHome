@@ -12,7 +12,7 @@ function proxyImg(url) {
   return `${API_BASE}/api/ha/image?url=${encodeURIComponent(url)}`;
 }
 
-export default function MusicDeck({ players, allMediaPlayers, onCommand, socket }) {
+export default function MusicDeck({ players, allMediaPlayers, onCommand, socket, forcedPlayerId }) {
   const navigate = useNavigate();
   const [selectedId, setSelectedId] = useState(null);
   const [showMediaBrowser, setShowMediaBrowser] = useState(false);
@@ -39,7 +39,7 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
 
   // Early return moved below hooks
   // Find active player for controls
-  let activePlayerRaw = players.find(p => p.deviceId === selectedId);
+  let activePlayerRaw = players.find(p => p.deviceId === (forcedPlayerId || selectedId));
   const allPlayers = allMediaPlayers || players;
   
   if (!activePlayerRaw) {
@@ -186,7 +186,7 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
         delete next[otherPlayerId];
         return next;
       });
-    }, 2500);
+    }, 8000);
   };
 
   const handleVolume = (e, id, vol) => {
@@ -367,21 +367,54 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
 
   if (!players || players.length === 0) return null;
 
-  // Deduplicate players by title, preferring Music Assistant entities to fix grouping sync and duplicate bugs
+  // Deduplicate players by entity base ID and title, preferring Music Assistant entities with friendly names
+  const normalizeEntityBase = (id) => {
+    return (id || '')
+      .replace('media_player.', '')
+      .replace(/^mass_/, '')
+      .toLowerCase().trim();
+  };
+  
   const uniquePlayersMap = new Map();
   // Use allMediaPlayers so we can group with speakers outside the current room
   (allMediaPlayers || players).forEach(p => {
     const normTitle = (p.title || '').toLowerCase().trim();
-    if (uniquePlayersMap.has(normTitle)) {
-      const existing = uniquePlayersMap.get(normTitle);
-      if (p.isMusicAssistant && !existing.isMusicAssistant) {
-        uniquePlayersMap.set(normTitle, p);
+    const normBase = normalizeEntityBase(p.deviceId);
+    const titleLooksLikeEntityId = normTitle.includes('media_player.') || 
+      (normTitle.includes('_') && !normTitle.includes(' '));
+    
+    const existingByTitle = !titleLooksLikeEntityId && uniquePlayersMap.get('title:' + normTitle);
+    const existingByBase = uniquePlayersMap.get('base:' + normBase);
+    
+    if (existingByTitle) {
+      if (p.isMusicAssistant && !existingByTitle.isMusicAssistant) {
+        uniquePlayersMap.set('title:' + normTitle, p);
+        uniquePlayersMap.set('base:' + normalizeEntityBase(existingByTitle.deviceId), p);
+        uniquePlayersMap.set('base:' + normBase, p);
+      }
+    } else if (existingByBase) {
+      const existingTitleLooksRaw = (existingByBase.title || '').includes('_') && !(existingByBase.title || '').includes(' ');
+      if (p.isMusicAssistant && !existingByBase.isMusicAssistant) {
+        uniquePlayersMap.set('base:' + normBase, p);
+        if (!titleLooksLikeEntityId) uniquePlayersMap.set('title:' + normTitle, p);
+      } else if (!titleLooksLikeEntityId && existingTitleLooksRaw) {
+        uniquePlayersMap.set('base:' + normBase, p);
+        uniquePlayersMap.set('title:' + normTitle, p);
       }
     } else {
-      uniquePlayersMap.set(normTitle, p);
+      uniquePlayersMap.set('base:' + normBase, p);
+      if (!titleLooksLikeEntityId) uniquePlayersMap.set('title:' + normTitle, p);
     }
   });
-  const uniquePlayers = Array.from(uniquePlayersMap.values());
+  
+  const seen = new Set();
+  const uniquePlayers = [];
+  for (const [key, p] of uniquePlayersMap) {
+    if (key.startsWith('base:') && !seen.has(p.deviceId)) {
+      seen.add(p.deviceId);
+      uniquePlayers.push(p);
+    }
+  }
 
   return (
     <div className="music-deck-container animate-slide-up" style={{ marginBottom: '24px' }}>
@@ -557,6 +590,10 @@ export default function MusicDeck({ players, allMediaPlayers, onCommand, socket 
                 {uniquePlayers
                   .filter(p => p.deviceId !== activePlayer.deviceId)
                   .filter(p => !activePlayer.isMusicAssistant || p.isMusicAssistant)
+                  .filter(p => {
+                    const t = (p.title || '').trim();
+                    return !(t.startsWith('media_player.') || (t.includes('_') && !t.includes(' ')));
+                  })
                   .sort((a, b) => {
                     const groupMembers = activePlayer.groupMembers || [];
                     const aGrouped = optimisticGroups[a.deviceId] !== undefined ? optimisticGroups[a.deviceId] : groupMembers.includes(a.deviceId);

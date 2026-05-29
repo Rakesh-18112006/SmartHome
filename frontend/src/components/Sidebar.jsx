@@ -11,6 +11,7 @@ const Sidebar = ({ activeTab, setActiveTab, isMobileOpen, onMobileClose }) => {
     { id: 'devices', icon: <img src="/icons/icons/Plug-White.svg" alt="Devices" style={{width: 20, height: 20}} />, label: 'Devices' },
     { id: 'audio-devices', icon: <img src="/icons/devices/audio.png" alt="Audio" style={{width: 20, height: 20, objectFit: 'contain', filter: 'invert(1) brightness(2)'}} />, label: 'Audio' },
     { id: 'staircase', icon: <img src="/icons/devices/staircase.png" alt="Staircase" style={{width: 20, height: 20, objectFit: 'contain', filter: 'invert(1) brightness(2)'}} />, label: 'Staircase' },
+    { id: 'surveillance', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 10l1.106-.553A1 1 0 0118 10.342v3.316a1 1 0 01-.894.895L16 14"/><rect x="2" y="6" width="14" height="12" rx="2"/><circle cx="9" cy="12" r="2"/></svg>, label: 'Surveillance' },
     { id: 'settings', icon: <img src="/icons/icons/Settings-White.svg" alt="Settings" style={{width: 20, height: 20}} />, label: 'Settings' },
   ];
 
