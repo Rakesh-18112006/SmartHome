@@ -361,7 +361,9 @@ const Dashboard = () => {
           isMusicAssistant: haDevice.isMusicAssistant,
           mediaPosition: haDevice.mediaPosition,
           mediaDuration: haDevice.mediaDuration,
-          mediaPositionUpdatedAt: haDevice.mediaPositionUpdatedAt
+          mediaPositionUpdatedAt: haDevice.mediaPositionUpdatedAt,
+          groupMembers: haDevice.raw?.attributes?.group_members || [],
+          raw: haDevice.raw
         };
 
         if (existingIndex >= 0) {

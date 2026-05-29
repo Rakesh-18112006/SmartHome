@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, Library, Music2, Disc3, Mic2, ListMusic, Play, Pause, SkipBack, SkipForward, Volume2, ArrowLeft, Loader2, X } from 'lucide-react';
+import { Home, Search, Library, Music2, Disc3, Mic2, ListMusic, Play, Pause, SkipBack, SkipForward, Volume2, ArrowLeft, Loader2, X, Speaker } from 'lucide-react';
 import { socket, fetchWithAuth } from '../App';
 import '../music.css';
 
@@ -33,6 +33,7 @@ export default function MusicHome() {
 
   const [players, setPlayers] = useState([]);
   const [activePlayerId, setActivePlayerId] = useState(null);
+  const [showPlayersPopup, setShowPlayersPopup] = useState(false);
 
   // Setup Socket listener to sync media players (same logic as App.jsx)
   useEffect(() => {
@@ -156,6 +157,10 @@ export default function MusicHome() {
   const [dragProgress, setDragProgress] = useState(null);
   const volumeTimeout = useRef(null);
   const seekTimeout = useRef(null);
+  
+  // Optimistic UI states for snappy grouping
+  const [optimisticVolumes, setOptimisticVolumes] = useState({});
+  const [optimisticGroups, setOptimisticGroups] = useState({});
   
   // Queue UI state
   const [showQueue, setShowQueue] = useState(false);
@@ -359,13 +364,64 @@ export default function MusicHome() {
   };
 
   const sendCommand = (service, serviceData = {}) => {
-    if (!activePlayerId) return;
     socket.emit('ha_command', {
       domain: 'media_player',
       service,
-      entityId: activePlayerId,
+      entityId: activePlayer.deviceId,
       serviceData
     });
+  };
+
+  const handleToggleGroupMember = (otherPlayerId, isCurrentlyGrouped) => {
+    if (!socket || !activePlayer.deviceId) return;
+    
+    // Optimistic UI update
+    setOptimisticGroups(prev => ({ ...prev, [otherPlayerId]: !isCurrentlyGrouped }));
+    
+    if (isCurrentlyGrouped) {
+      socket.emit('ha_command', {
+        domain: 'media_player',
+        service: 'unjoin',
+        entityId: otherPlayerId
+      });
+    } else {
+      socket.emit('ha_command', {
+        domain: 'media_player',
+        service: 'join',
+        entityId: activePlayer.deviceId,
+        serviceData: { group_members: [otherPlayerId] }
+      });
+    }
+    
+    // Clear optimistic state after a delay
+    setTimeout(() => {
+      setOptimisticGroups(prev => {
+        const next = { ...prev };
+        delete next[otherPlayerId];
+        return next;
+      });
+    }, 2500);
+  };
+
+  const handleSetPlayerVolume = (targetPlayerId, volPercent) => {
+    if (!socket) return;
+    
+    setOptimisticVolumes(prev => ({ ...prev, [targetPlayerId]: volPercent }));
+    
+    socket.emit('ha_command', {
+      domain: 'media_player',
+      service: 'volume_set',
+      entityId: targetPlayerId,
+      serviceData: { volume_level: volPercent / 100 }
+    });
+    
+    setTimeout(() => {
+      setOptimisticVolumes(prev => {
+        const next = { ...prev };
+        delete next[targetPlayerId];
+        return next;
+      });
+    }, 2000);
   };
 
   const handlePlayPause = () => {
@@ -559,8 +615,11 @@ export default function MusicHome() {
           </div>
 
           <div className="player-extra">
-            <button className={`player-btn ${showQueue ? 'active' : ''}`} onClick={() => setShowQueue(!showQueue)} style={{ marginRight: '1rem' }} title="Queue">
+            <button className={`player-btn ${showQueue ? 'active' : ''}`} onClick={() => setShowQueue(!showQueue)} title="Queue">
               <ListMusic size={18} color={showQueue ? 'var(--primary)' : 'var(--text-secondary)'} />
+            </button>
+            <button className={`player-btn ${showPlayersPopup ? 'active' : ''}`} onClick={() => setShowPlayersPopup(!showPlayersPopup)} style={{ marginRight: '1rem' }} title="Players">
+              <Speaker size={18} color={showPlayersPopup ? 'var(--primary)' : 'var(--text-secondary)'} />
             </button>
             <div className="volume-control">
               <span style={{ color: 'var(--text-secondary)', display: 'flex' }}>
@@ -574,6 +633,123 @@ export default function MusicHome() {
             </div>
           </div>
         </div>
+
+        {/* Players Grouping Popup */}
+        {showPlayersPopup && (
+          <div className="players-popup animate-slide-up" style={{
+            position: 'absolute',
+            bottom: '90px',
+            right: '24px',
+            width: '320px',
+            background: 'var(--bg-card, #1a1a1e)',
+            borderRadius: '16px',
+            border: '1px solid var(--border)',
+            boxShadow: 'var(--shadow-deep, 0 24px 80px rgba(0,0,0,0.6))',
+            padding: '16px',
+            zIndex: 100
+          }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-main, #fff)' }}>
+              <Speaker size={18} /> Players
+            </h3>
+            
+            {/* Master Player */}
+            <div style={{ padding: '12px', background: 'var(--bg-elevated, rgba(128,128,128,0.1))', borderRadius: '12px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                {activePlayer.albumArt ? (
+                  <img src={activePlayer.albumArt} alt="" style={{ width: '40px', height: '40px', borderRadius: '8px', objectFit: 'cover' }} />
+                ) : (
+                  <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: 'var(--bg-main, rgba(128,128,128,0.2))', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Music2 size={20} color="var(--text-main, #fff)" />
+                  </div>
+                )}
+                <div style={{ overflow: 'hidden' }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-main, #fff)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activePlayer.title}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary, rgba(255,255,255,0.5))', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {activePlayer.mediaTitle || 'Master Speaker'}
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Volume2 size={14} color="var(--text-secondary, rgba(255,255,255,0.5))" />
+                <input type="range" min="0" max="100" 
+                  value={activePlayer.volume || 0}
+                  onChange={(e) => handleSetPlayerVolume(activePlayer.deviceId, parseInt(e.target.value, 10))}
+                  style={{ flex: 1, height: '4px', accentColor: 'var(--primary, #d4a373)' }} 
+                />
+              </div>
+            </div>
+
+            {/* Other Speakers */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '300px', overflowY: 'auto', paddingRight: '8px' }}>
+              {(() => {
+                const uniquePlayersMap = new Map();
+                players.forEach(p => {
+                  const normTitle = (p.title || '').toLowerCase().trim();
+                  if (uniquePlayersMap.has(normTitle)) {
+                    const existing = uniquePlayersMap.get(normTitle);
+                    if (p.isMusicAssistant && !existing.isMusicAssistant) {
+                      uniquePlayersMap.set(normTitle, p);
+                    }
+                  } else {
+                    uniquePlayersMap.set(normTitle, p);
+                  }
+                });
+                const uniquePlayers = Array.from(uniquePlayersMap.values());
+                return uniquePlayers;
+              })()
+                .filter(p => p.deviceId !== activePlayer.deviceId)
+                .filter(p => !activePlayer.isMusicAssistant || p.isMusicAssistant)
+                .sort((a, b) => {
+                  const groupMembers = activePlayer.groupMembers || [];
+                  const aGrouped = optimisticGroups[a.deviceId] !== undefined ? optimisticGroups[a.deviceId] : groupMembers.includes(a.deviceId);
+                  const bGrouped = optimisticGroups[b.deviceId] !== undefined ? optimisticGroups[b.deviceId] : groupMembers.includes(b.deviceId);
+                  const aIsGroup = a.title.toLowerCase().includes('group');
+                  const bIsGroup = b.title.toLowerCase().includes('group');
+                  
+                  if (aGrouped && !bGrouped) return -1;
+                  if (!aGrouped && bGrouped) return 1;
+                  if (aIsGroup && !bIsGroup) return 1;
+                  if (!aIsGroup && bIsGroup) return -1;
+                  return a.title.localeCompare(b.title);
+                })
+                .map(p => {
+                const groupMembers = activePlayer.groupMembers || [];
+                const serverGrouped = groupMembers.includes(p.deviceId);
+                const isGrouped = optimisticGroups[p.deviceId] !== undefined ? optimisticGroups[p.deviceId] : serverGrouped;
+                
+                const serverVol = p.volume || 0;
+                const displayVol = optimisticVolumes[p.deviceId] !== undefined ? optimisticVolumes[p.deviceId] : serverVol;
+                
+                return (
+                  <div key={p.deviceId} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: isGrouped ? 'var(--text-main, #fff)' : 'var(--text-secondary, rgba(255,255,255,0.5))' }}>
+                        <Speaker size={16} />
+                        <span style={{ fontSize: '0.9rem' }}>{p.title}</span>
+                      </div>
+                      <input type="checkbox" 
+                        checked={isGrouped} 
+                        onChange={() => handleToggleGroupMember(p.deviceId, isGrouped)} 
+                        style={{ width: '18px', height: '18px', accentColor: 'var(--primary, #d4a373)', cursor: 'pointer' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '24px' }}>
+                      <Volume2 size={12} color="var(--text-secondary, rgba(255,255,255,0.5))" />
+                      <input type="range" min="0" max="100" 
+                        value={displayVol}
+                        onChange={(e) => handleSetPlayerVolume(p.deviceId, parseInt(e.target.value, 10))}
+                        disabled={!isGrouped}
+                        style={{ flex: 1, height: '4px', accentColor: 'var(--primary, #d4a373)', opacity: isGrouped ? 1 : 0.4 }} 
+                      />
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary, rgba(255,255,255,0.5))', width: '24px' }}>{displayVol}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
       </main>
     </div>
   );
